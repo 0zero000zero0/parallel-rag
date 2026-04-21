@@ -1,0 +1,27 @@
+# 评估数据集路径
+evaluate_datasets:
+  2wikimultihopqa: /home/zdw2200170271/llm/datasets/FlashRAG_datasets/2wikimultihopqa/test.jsonl
+  bamboogle: /home/zdw2200170271/llm/datasets/FlashRAG_datasets/bamboogle/test.jsonl
+  hotpotqa: /home/zdw2200170271/llm/datasets/FlashRAG_datasets/hotpotqa/test.jsonl
+  musique: /home/zdw2200170271/llm/datasets/FlashRAG_datasets/musique/test.jsonl
+  nq: /home/zdw2200170271/llm/datasets/FlashRAG_datasets/nq/test.jsonl
+  popqa: /home/zdw2200170271/llm/datasets/FlashRAG_datasets/popqa/test.jsonl
+  triviaqa: /home/zdw2200170271/llm/datasets/FlashRAG_datasets/triviaqa/test.jsonl
+  ambigqa: /home/zdw2200170271/llm/datasets/FlashRAG_datasets/ambigqa/test.jsonl
+
+# main.py 输出结果评测配置
+main_result_eval:
+  # main.py 产出的 jsonlines 文件路径
+  result_file: test.jsonl
+  # 评测输出根目录，实际会保存到 save_root/<timestamp>/
+  save_root: eval-results
+  dataset_name: main_output_eval
+  timestamp_format: "%Y%m%d_%H%M%S"
+  metrics:
+    - f1
+    - em
+    - recall
+    - precision
+    - acc
+    - cover_em_1
+    - cover_em_2
