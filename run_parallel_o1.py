@@ -29,17 +29,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model_path", type=str, default=None,
                         help="Local or HF model path used to load tokenizer for chat template")
     parser.add_argument("--llm_timeout", type=float, default=None)
-    parser.add_argument("--is_chat", action="store_true",
-                        help="Use /v1/chat/completions instead of /v1/completions")
     parser.add_argument("--use_chat_template", action="store_true",
                         help="Render chat messages via tokenizer.apply_chat_template before /v1/completions")
 
-    parser.add_argument("--num_parallel", type=int, default=3)
     parser.add_argument("--docs_per_query", type=int, default=5)
 
-    parser.add_argument("--trigger_max_tokens", type=int, default=256)
-    parser.add_argument("--trigger_temperature", type=float, default=0.6)
-    parser.add_argument("--trigger_top_p", type=float, default=0.9)
+    parser.add_argument("--navigator_max_tokens", type=int, default=256)
+    parser.add_argument("--navigator_temperature", type=float, default=0.6)
+    parser.add_argument("--navigator_top_p", type=float, default=0.9)
 
     parser.add_argument("--path_max_tokens", type=int, default=512)
     parser.add_argument("--path_temperature", type=float, default=0.8)
@@ -50,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--refine_top_p", type=float, default=0.9)
 
     parser.add_argument("--stop_tokens", type=str,
-                        default="</search>,</answer>")
+                        default="</search>,</answer>,</search_directions>")
     parser.add_argument("--max_iterations", type=int, default=5)
     parser.add_argument("--num_samples", type=int, default=None)
     parser.add_argument("--debug",  action='store_true')
@@ -102,23 +99,9 @@ def main() -> None:
             questions.append(question)
 
         batch_results: List[Dict[str, Any]] = []
-        batch_error = ""
 
-        try:
-            batch_results = [dict(item)
-                             for item in pipeline.run_batch(questions, args.max_iterations)]
-        except Exception as exc:
-            batch_error = str(exc)
-            batch_results = [
-                {
-                    "query": question,
-                    "path_plans": [],
-                    "retrieved_docs": [],
-                    "refined_paths": [],
-                    "global_summaries": [],
-                    "final_answer": "",
-                } for _, question, _ in validated_items
-            ]
+        batch_results = [dict(item)
+                         for item in pipeline.run_batch(questions, args.max_iterations)]
 
         for (idx, question, golden_answers), result in zip(validated_items,
                                                            batch_results):
@@ -127,10 +110,8 @@ def main() -> None:
                 "index": idx,
                 "question": question,
                 "golden_answers": golden_answers,
-                "model_output": final_answer,
                 "predicted_answer_in_tag": final_answer,
                 "pipeline_result": result,
-                "error": batch_error,
             })
 
     write_jsonlines(output_file_path, output_records)

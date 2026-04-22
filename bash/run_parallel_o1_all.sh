@@ -53,16 +53,15 @@ for dataset in "${DATASETS[@]}"; do
     --openai_base_url "$OPENAI_BASE_URL" \
     --openai_api_key "$OPENAI_API_KEY" \
     --model "$MODEL" \
-    --num_parallel 3 \
     --docs_per_query 5 \
-    --trigger_max_tokens 512 \
-    --trigger_temperature 0.7 \
-    --trigger_top_p 0.8 \
+    --navigator_max_tokens 1024 \
+    --navigator_temperature 0.8 \
+    --navigator_top_p 0.8 \
     --path_max_tokens 512 \
-    --path_temperature 0.7 \
+    --path_temperature 0.8 \
     --path_top_p 0.8 \
     --refine_max_tokens 1024 \
-    --refine_temperature 0.7 \
+    --refine_temperature 0.8 \
     --refine_top_p 0.8 \
     --max_iterations 5 \
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \

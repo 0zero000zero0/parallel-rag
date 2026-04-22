@@ -1,3 +1,4 @@
+import hashlib
 import re
 from types import SimpleNamespace
 from typing import Any, List, TypedDict
@@ -13,34 +14,58 @@ ANSWER_TAG_PATTERN = re.compile(r"<answer>(.*?)</answer>",
                                 flags=re.DOTALL | re.IGNORECASE)
 INFO_TAG_PATTERN = re.compile(r"<information>(.*?)</information>",
                               flags=re.DOTALL | re.IGNORECASE)
+SEARCH_DIRECTIONS_PATTERN = re.compile(r"<search_directions>(.*?)</search_directions>",
+                                       flags=re.DOTALL | re.IGNORECASE)
+DIRECTION_TAG_PATTERN = re.compile(r"<direction(?:\s+id=[\"']?(.*?)[\"']?)?>(.*?)</direction>",
+                                   flags=re.DOTALL | re.IGNORECASE)
+
+
+class SearchDirection(TypedDict):
+    direction_id: str
+    direction: str
 
 
 class PathPlan(TypedDict):
     prompt: str
     path_id: int
-    think: str
+    direction_id: str
+    direction: str
+    navigator_think: str
+    path_agent_think: str
     search_query: str
 
 
 class RefinedPathResult(TypedDict):
     path_id: int
+    direction_id: str
+    direction: str
     think: str
     search_query: str
     refined_information: str
     selected_doc_ids: List[str]
 
 
+class PooledDocument(TypedDict):
+    doc_id: str
+    contents: str
+    sources: List[str]
+    source_directions: List[str]
+    source_queries: List[str]
+
+
 class ParallelO1Result(TypedDict):
     query: str
     max_iterations: int
     executed_iterations: int
-    prompts: List[Any]
-    raw_outputs: List[str]
+    navigator_pormpts: List[str]
+    navigator_thoughts: List[str]
+    search_directions: List[List[SearchDirection]]
     path_plans: List[List[PathPlan]]
     retrieved_docs: List[BatchSearchDocs]
+    pooled_docs: List[List[PooledDocument]]
     refine_prompts: List[List[str]]
     refined_paths: List[List[RefinedPathResult]]
-    global_summaries: List[str]
+    global_refinements: List[str]
     final_answer: str
 
 
@@ -48,11 +73,10 @@ class ParallelO1:
     def __init__(self,
                  retriever: RetrieverClient,
                  llm_client: OpenAIClient,
-                 parallel_path_count: int = 3,
                  docs_per_query: int = 3,
-                 trigger_max_tokens: int = 256,
-                 trigger_temperature: float = 0.6,
-                 trigger_top_p: float = 0.9,
+                 navigator_max_tokens: int = 256,
+                 navigator_temperature: float = 0.6,
+                 navigator_top_p: float = 0.9,
                  path_max_tokens: int = 384,
                  path_temperature: float = 0.8,
                  path_top_p: float = 0.95,
@@ -70,11 +94,10 @@ class ParallelO1:
                  tokenizer: Any = None):
         self.retriever = retriever
         self.llm_client = llm_client
-        self.parallel_path_count = max(1, parallel_path_count)
         self.docs_per_query = max(1, docs_per_query)
-        self.trigger_max_tokens = trigger_max_tokens
-        self.trigger_temperature = trigger_temperature
-        self.trigger_top_p = trigger_top_p
+        self.navigator_max_tokens = navigator_max_tokens
+        self.navigator_temperature = navigator_temperature
+        self.navigator_top_p = navigator_top_p
         self.path_max_tokens = path_max_tokens
         self.path_temperature = path_temperature
         self.path_top_p = path_top_p
@@ -125,12 +148,12 @@ class ParallelO1:
             tokenizer = AutoTokenizer.from_pretrained(model_path,
                                                       trust_remote_code=True)
 
-        parallel_path_count = int(getattr(args, "parallel_path_count", 3))
         docs_per_query = int(getattr(args, "docs_per_query", 3))
 
-        trigger_max_tokens = int(getattr(args, "trigger_max_tokens", 256))
-        trigger_temperature = float(getattr(args, "trigger_temperature", 0.6))
-        trigger_top_p = float(getattr(args, "trigger_top_p", 0.9))
+        navigator_max_tokens = int(getattr(args, "navigator_max_tokens", 256))
+        navigator_temperature = float(
+            getattr(args, "navigator_temperature", 0.6))
+        navigator_top_p = float(getattr(args, "navigator_top_p", 0.9))
 
         path_max_tokens = int(getattr(args, "path_max_tokens", 384))
         path_temperature = float(getattr(args, "path_temperature", 0.8))
@@ -165,11 +188,10 @@ class ParallelO1:
                                   use_chat_template=use_chat_template)
         return cls(retriever=retriever_client,
                    llm_client=llm_client,
-                   parallel_path_count=parallel_path_count,
                    docs_per_query=docs_per_query,
-                   trigger_max_tokens=trigger_max_tokens,
-                   trigger_temperature=trigger_temperature,
-                   trigger_top_p=trigger_top_p,
+                   navigator_max_tokens=navigator_max_tokens,
+                   navigator_temperature=navigator_temperature,
+                   navigator_top_p=navigator_top_p,
                    path_max_tokens=path_max_tokens,
                    path_temperature=path_temperature,
                    path_top_p=path_top_p,
@@ -244,88 +266,179 @@ class ParallelO1:
                                              self.stop_tokens,
                                              tokenizer=self.tokenizer)
 
-    def _build_main_agent_prompt(self, user_input: str) -> Any:
-        system_prompt = (
-            "You are a reasoning assistant with the ability to perform web searches to help you answer the user's question accurately. "
-            "You must conduct reasoning inside <think> and </think> first every time you get new information. "
-            "After reasoning, if you find that you lack some knowledge, you can call a search engine by <search> query </search>, "
-            "and it will return the refined information between <information> and </information>. "
-            "You can search as many times as you want. "
-            "If you find no further external knowledge needed, you can directly provide the answer inside <answer> and </answer> without detailed illustrations. "
-            "For example, <answer> only short answer here </answer>."
-        )
-        return self._to_prompt(system_prompt, user_input)
+    def _extract_think(self, text: str) -> str:
+        extracted = self._extract_last_tag(THINK_TAG_PATTERN, text)
+        return extracted if extracted else text.strip()
 
-    def _build_path_agent_prompt(self, state_prompt: str,
-                                 original_question: str) -> Any:
-        main_queries = self._extract_searches(state_prompt)
-        main_query = main_queries[-1] if main_queries else ""
+    def _parse_search_directions(self, text: str) -> List[SearchDirection]:
+        block_match = SEARCH_DIRECTIONS_PATTERN.search(text)
+        if not block_match:
+            return []
+
+        block = block_match.group(1)
+        directions: List[SearchDirection] = []
+        for idx, match in enumerate(DIRECTION_TAG_PATTERN.finditer(block),
+                                    start=1):
+            direction_id = (match.group(1) or str(idx)).strip() or str(idx)
+            direction_text = re.sub(r"\s+", " ", match.group(2)).strip()
+            if not direction_text:
+                continue
+            directions.append({
+                "direction_id": direction_id,
+                "direction": direction_text,
+            })
+
+        return directions
+
+    def _build_navigator_agent_prompt(self, question: str,
+                                      historical_refinements: List[str]) -> Any:
+        history_block = "\n\n".join([
+            f"R_{idx + 1}:\n{report}"
+            for idx, report in enumerate(historical_refinements)
+        ]) if historical_refinements else "None"
 
         system_prompt = (
-            "You are a path search agent on parallel mode. "
-            "You are tasked to rewrite or improve the main search query into one better query. "
-            "You must conduct reasoning inside <think> and </think> first and output the new search query by <search> query here </search>. "
+            "You are a navigator agent in a multi-stage retrieval reasoning system for answer the user's question. "
+            "You receive the original question and the historical global refinement reports R_<i>. "
+            "You must first think globally inside <think>...</think>. "
+            "If the available information is sufficient, output the final concise short answer inside <answer>...</answer>. "
+            "If you lack of some external informatioin, you can output a dynamic set of abstract retrieval directions inside <search_directions>...</search_directions>. "
+            "Each direction must be wrapped in <direction id=\"k\">...</direction>. "
+            "And the system will return relative informatio inside <information>...</information>"
+            "Each direction should explicitly describe the entity, relation, attribute, and the information gap that needs to be filled. "
+            "You may produce as many directions as needed for this round."
         )
         user_prompt = (
-            f"You must use the following two inputs to produce your next query:\n"
-            f"- Original Question: {original_question}\n"
-            f"- Main Agent Search Query: {main_query}\n\n"
-            # f"Main Agent Output:\n{state_prompt}"
+            f"Original Question: {question}\n\n"
+            f"Historical Refined Information R_<i>:\n{history_block}\n\n"
+            "Decide whether to answer now or propose the next retrieval directions."
         )
         return self._to_prompt(system_prompt, user_prompt)
 
-    def _build_refine_agent_prompt(self,
-                                   question: str,
-                                   think: str,
-                                   query: str,
-                                   docs: List[RetrieverDocument]) -> Any:
+    def _build_path_agent_prompt(self, original_question: str,
+                                 navigator_think: str,
+                                 direction: SearchDirection) -> Any:
+        system_prompt = (
+            "You are a helpful assistant that help Navigator Agent to answer user's question"
+            "You will receive the original question, the Navigator Agent's current global thoughts, and one assigned retrieval direction by Navigator Agent. "
+            "Your task is to convert the abstract direction into one concrete search-engine-friendly query. "
+            "You must reason locally inside <think>...</think> and then output exactly one search query inside <search>...</search>. "
+            "The query should be precise, operational, and directly aligned with the assigned direction."
+        )
+        user_prompt = (
+            f"Original Question: {original_question}\n"
+            f"Navigator Thinking T_i: {navigator_think}\n"
+            f"Assigned Direction {direction['direction_id']}: {direction['direction']}\n\n"
+            "Think about above information and generate one concrete search query for this direction."
+        )
+        return self._to_prompt(system_prompt, user_prompt)
+
+    def _build_global_refine_agent_prompt(self,
+                                          question: str,
+                                          navigator_think: str,
+                                          directions: List[SearchDirection],
+                                          path_plans: List[PathPlan],
+                                          pooled_docs: List[PooledDocument]) -> Any:
+        direction_block = "\n".join([
+            f"- Direction {direction['direction_id']}: {direction['direction']}"
+            for direction in directions
+        ]) if directions else "None"
+
+        query_block = "\n".join([
+            f"- Direction {plan['direction_id']} | Search Query: {plan['search_query']}"
+            for plan in path_plans
+        ]) if path_plans else "None"
+
         docs_block = "\n\n".join([
-            f"DocID: {doc.get('id', '')}\nContent: {doc.get('contents', '')}"
-            for doc in docs[:self.docs_per_query]
-        ])
-        if not docs_block:
-            docs_block = "No retrieved documents."
+            "\n".join([
+                f"DocID: {doc['doc_id']}",
+                f"Sources: {', '.join(doc['sources'])}",
+                f"Source Directions: {' | '.join(doc['source_directions'])}",
+                f"Source Queries: {' | '.join(doc['source_queries'])}",
+                f"Content: {doc['contents']}",
+            ])
+            for doc in pooled_docs
+        ]) if pooled_docs else "No documents in the pooled knowledge base."
 
         system_prompt = (
-            "You are tasked with reading and analyzing web pages based on the following inputs: Previous Reasoning Steps, Current Search Query, and Searched Web Pages. "
-            "Your objective is to extract relevant and helpful information for Current Search Query from the Searched Web Pages and seamlessly integrate this information into the Previous Reasoning Steps to continue reasoning for the original question.\n"
-            "Guidelines:\n"
-            "1. Analyze the Searched Web Pages:\n"
-            "- Carefully review the content of each searched web page.\n"
-            "- Identify factual information that is relevant to the Current Search Query and can aid in the reasoning process for the original question.\n"
-            "2. Extract Relevant Information:\n"
-            "- Select the information from the Searched Web Pages that directly contributes to advancing the Previous Reasoning Steps.\n"
-            "- Ensure that the extracted information is accurate and relevant.\n"
-            "3. Output Format:\n"
-            "- If the web pages provide helpful information for current search query and original question: Present the information between <information> and </information>. For example, <information> Helpful information </information>\n"
-            "- If the web pages do not provide any helpful information for current search query and original question: Output <information>No helpful information found.</information>"
+            "You are the Global Refine Agent. "
+            "You receive the original question, this round's direction set, the concrete queries used by the Path Agents, and a deduplicated global document pool with provenance metadata. "
+            "Your job is to read all pooled documents jointly, cross-validate facts across directions, resolve overlaps, highlight conflicts if any, and produce one compact but information-dense global refinement report R_i. "
+            "Output exactly one <information>...</information> block. "
+            "The report should be structured, factual, and useful for the next Navigator iteration."
         )
         user_prompt = (
-            f"Inputs:\n"
             f"Original Question: {question}\n"
-            f"Previous Reasoning Steps: {think}\n"
-            f"Current Search Query: {query}\n"
-            f"Searched Web Pages: {docs_block}\n\n"
-            "Now analyze each web page and find helpful information."
+            f"Navigator Thinking T_i: {navigator_think}\n\n"
+            f"Directions:\n{direction_block}\n\n"
+            f"Concrete Queries:\n{query_block}\n\n"
+            f"Deduplicated Global Document Pool:\n{docs_block}\n\n"
+            "Produce the global refinement report R_i now."
         )
         return self._to_prompt(system_prompt, user_prompt)
 
-    def _build_parallel_appendix(self,
-                                 refined_paths: List[RefinedPathResult]) -> str:
-        if not refined_paths:
-            return "\n<information>\nNo helpful information found.\n</information>\n"
+    def _build_refinement_appendix(self, iteration_idx: int,
+                                   report: str) -> str:
+        return (
+            "\n<information>\n"
+            f"Global Refinement Report R_{iteration_idx}:\n"
+            f"{report}\n"
+            "</information>\n"
+        )
 
-        blocks: List[str] = []
-        for path in refined_paths:
-            blocks.append(
-                "\n".join([
-                    f"Path: p_{path['path_id']}",
-                    f"<think>{path['think']}</think>",
-                    f"<search>{path['search_query']}</search>",
-                    f"<information>{path['refined_information']}</information>",
-                ]))
-        merged = "\n\n".join(blocks)
-        return f"\n<information>\n{merged}\n</information>\n"
+    def _build_final_answer_prompt(self, question: str,
+                                   historical_refinements: List[str]) -> Any:
+        history_block = "\n\n".join([
+            f"R_{idx + 1}:\n{report}"
+            for idx, report in enumerate(historical_refinements)
+        ]) if historical_refinements else "None"
+        system_prompt = (
+            "You are the Navigator Agent. "
+            "Use the historical global refinement reports to provide the best final answer now. "
+            "Output only the concise final answer inside <answer>...</answer>."
+        )
+        user_prompt = (
+            f"Original Question: {question}\n\n"
+            f"Historical Global Refinements:\n{history_block}"
+        )
+        return self._to_prompt(system_prompt, user_prompt)
+
+    def _make_doc_key(self, doc: RetrieverDocument) -> str:
+        doc_id = str(doc.get("id", "")).strip()
+        if doc_id:
+            return doc_id
+        contents = str(doc.get("contents", ""))
+        return hashlib.sha1(contents.encode("utf-8")).hexdigest()
+
+    def _pool_documents(self,
+                        path_plans: List[PathPlan],
+                        docs_map: dict[tuple[int, int], List[RetrieverDocument]],
+                        sample_i: int) -> List[PooledDocument]:
+        pooled_by_key: dict[str, PooledDocument] = {}
+        for plan in path_plans:
+            docs = docs_map.get((sample_i, plan["path_id"]), [])
+            for doc in docs:
+                key = self._make_doc_key(doc)
+                contents = str(doc.get("contents", "")).strip()
+                if key not in pooled_by_key:
+                    pooled_by_key[key] = {
+                        "doc_id": str(doc.get("id", "")).strip() or key,
+                        "contents": contents,
+                        "sources": [plan["direction_id"]],
+                        "source_directions": [plan["direction"]],
+                        "source_queries": [plan["search_query"]],
+                    }
+                    continue
+
+                pooled_doc = pooled_by_key[key]
+                if plan["direction_id"] not in pooled_doc["sources"]:
+                    pooled_doc["sources"].append(plan["direction_id"])
+                if plan["direction"] not in pooled_doc["source_directions"]:
+                    pooled_doc["source_directions"].append(plan["direction"])
+                if plan["search_query"] not in pooled_doc["source_queries"]:
+                    pooled_doc["source_queries"].append(plan["search_query"])
+
+        return list(pooled_by_key.values())
 
     def _parse_answer(self, text: str) -> str:
         return self._extract_last_tag(ANSWER_TAG_PATTERN, text)
@@ -343,26 +456,29 @@ class ParallelO1:
         if not questions:
             return []
 
-        dialogue_states = [f"User's Question: {q}" for q in questions]
         completed = [False] * len(questions)
 
         results: List[ParallelO1Result] = [{
             "query": q,
             "max_iterations": max_iterations,
             "executed_iterations": 0,
-            "prompts": [],
-            "raw_outputs": [],
+            "navigator_pormpts": [],
+            "navigator_thoughts": [],
+            "search_directions": [],
             "path_plans": [],
             "retrieved_docs": [],
+            "pooled_docs": [],
             "refine_prompts": [],
             "refined_paths": [],
-            "global_summaries": [],
+            "global_refinements": [],
             "final_answer": "",
         } for q in questions]
 
-        trigger_config = self._make_config(max_tokens=self.trigger_max_tokens,
-                                           temperature=self.trigger_temperature,
-                                           top_p=self.trigger_top_p)
+        refinement_histories: List[List[str]] = [[] for _ in questions]
+
+        navigator_config = self._make_config(max_tokens=self.navigator_max_tokens,
+                                             temperature=self.navigator_temperature,
+                                             top_p=self.navigator_top_p)
         path_config = self._make_config(max_tokens=self.path_max_tokens,
                                         temperature=self.path_temperature,
                                         top_p=self.path_top_p)
@@ -370,44 +486,64 @@ class ParallelO1:
                                           temperature=self.refine_temperature,
                                           top_p=self.refine_top_p)
 
-        for _ in range(max_iterations):
+        for iteration_idx in range(max_iterations):
             active_indices = [i for i, c in enumerate(completed) if not c]
             if not active_indices:
                 break
 
             active_prompts = [
-                self._build_main_agent_prompt(dialogue_states[i])
+                self._build_navigator_agent_prompt(
+                    question=questions[i],
+                    historical_refinements=refinement_histories[i])
                 for i in active_indices
             ]
-            trigger_outputs = self._generate_text_batch(active_prompts,
-                                                        trigger_config)
+            navigator_outputs = self._generate_text_batch(active_prompts,
+                                                          navigator_config)
 
             path_generation_prompts: List[Any] = []
-            path_meta: List[tuple[int, int, str]] = []
+            path_meta: List[tuple[int, int, str, str, str, str]] = []
+            path_plans_by_sample: List[List[PathPlan]] = [
+                [] for _ in range(len(questions))
+            ]
+            directions_by_sample: List[List[SearchDirection]] = [
+                [] for _ in range(len(questions))
+            ]
 
             for local_i, sample_i in enumerate(active_indices):
-                trigger_output = trigger_outputs[local_i]
-                results[sample_i]["prompts"].append(active_prompts[local_i])
-                results[sample_i]["raw_outputs"].append(trigger_output)
+                navigator_output = navigator_outputs[local_i]
+                if not results[sample_i]["navigator_pormpts"]:
+                    results[sample_i]["navigator_pormpts"].append(
+                        self._prompt_to_text(active_prompts[local_i]))
+                results[sample_i]["navigator_pormpts"].append(
+                    navigator_output)
                 results[sample_i]["executed_iterations"] += 1
-                dialogue_states[sample_i] += trigger_output + "\n"
+                navigator_think = self._extract_think(navigator_output)
+                results[sample_i]["navigator_thoughts"].append(
+                    navigator_think)
 
-                answer = self._parse_answer(trigger_output)
+                answer = self._parse_answer(navigator_output)
                 if answer:
                     results[sample_i]["final_answer"] = answer
                     completed[sample_i] = True
                     continue
 
-                for path_id in range(1, self.parallel_path_count + 1):
-                    path_state = (
-                        f"Original Question: {questions[sample_i]}\n"
-                        f"Main Agent Output:\n{trigger_output}\n"
-                    )
+                directions = self._parse_search_directions(navigator_output)
+                results[sample_i]["search_directions"].append(directions)
+                directions_by_sample[sample_i] = directions
+                if not directions:
+                    completed[sample_i] = True
+                    continue
+
+                for path_id, direction in enumerate(directions, start=1):
                     path_prompt = self._build_path_agent_prompt(
-                        path_state, results[sample_i]["query"])
+                        original_question=questions[sample_i],
+                        navigator_think=navigator_think,
+                        direction=direction)
                     path_generation_prompts.append(path_prompt)
                     path_meta.append(
-                        (sample_i, path_id, self._prompt_to_text(path_prompt)))
+                        (sample_i, path_id, direction["direction_id"],
+                         direction["direction"], navigator_think,
+                         self._prompt_to_text(path_prompt)))
 
             if not path_generation_prompts:
                 continue
@@ -415,30 +551,28 @@ class ParallelO1:
             path_outputs = self._generate_text_batch(path_generation_prompts,
                                                      path_config)
 
-            path_plans_by_sample: List[List[PathPlan]] = [
-                [] for _ in range(len(questions))
-            ]
-
             flat_queries: List[str] = []
             query_meta: List[tuple[int, int]] = []
 
-            for idx, output in enumerate(path_outputs):
-                sample_i, path_id, path_prompt_text = path_meta[idx]
-                think = self._extract_last_tag(THINK_TAG_PATTERN, output)
-                if think == "":
-                    think = output
-                queries = self._extract_searches(output)
-                query = queries[0] if queries else ""
+            for idx, path_output in enumerate(path_outputs):
+                sample_i, path_id, direction_id, direction_text, navigator_think, path_prompt_text = path_meta[
+                    idx]
+                path_agent_think = self._extract_think(path_output)
+                path_agent_queries = self._extract_searches(path_output)
+                path_agent_query = path_agent_queries[0] if path_agent_queries else ""
                 path_plan: PathPlan = {
                     "prompt": path_prompt_text,
                     "path_id": path_id,
-                    "think": think,
-                    "search_query": query,
+                    "direction_id": direction_id,
+                    "direction": direction_text,
+                    "navigator_think": navigator_think,
+                    "path_agent_think": path_agent_think,
+                    "search_query": path_agent_query,
                 }
                 path_plans_by_sample[sample_i].append(path_plan)
 
-                if query:
-                    flat_queries.append(query)
+                if path_agent_query:
+                    flat_queries.append(path_agent_query)
                     query_meta.append((sample_i, path_id))
 
             for sample_i in range(len(questions)):
@@ -459,79 +593,108 @@ class ParallelO1:
                 docs_map[meta] = docs
 
             refine_prompts: List[Any] = []
-            refine_meta: List[tuple[int, int, str, str, List[str]]] = []
-
-            for sample_i in active_indices:
-                sample_path_plans = path_plans_by_sample[sample_i]
-                if not sample_path_plans:
-                    continue
-                for plan in sample_path_plans:
-                    key = (sample_i, plan["path_id"])
-                    docs = docs_map.get(key, [])
-                    selected_doc_ids = [doc.get("id", "")
-                                        for doc in docs[:self.docs_per_query]]
-                    refine_prompt = self._build_refine_agent_prompt(
-                        question=questions[sample_i],
-                        think=plan["think"],
-                        query=plan["search_query"],
-                        docs=docs,
-                    )
-                    refine_prompts.append(refine_prompt)
-                    refine_meta.append((sample_i, plan["path_id"],
-                                        plan["think"],
-                                        plan["search_query"],
-                                        selected_doc_ids))
-
-            refine_outputs = self._generate_text_batch(refine_prompts,
-                                                       refine_config)
-
+            refine_meta: List[tuple[int, str, List[str], List[str]]] = []
             refined_paths_by_sample: List[List[RefinedPathResult]] = [
+                [] for _ in range(len(questions))
+            ]
+            pooled_docs_by_sample: List[List[PooledDocument]] = [
                 [] for _ in range(len(questions))
             ]
             retrieved_by_sample: List[BatchSearchDocs] = [
                 [] for _ in range(len(questions))
             ]
-            refine_prompts_by_sample: List[List[Any]] = [
-                [] for _ in range(len(questions))
-            ]
-
-            for idx, refine_output in enumerate(refine_outputs):
-                sample_i, path_id, think, search_query, selected_doc_ids = refine_meta[idx]
-                info = self._parse_info(refine_output)
-
-                refined_paths_by_sample[sample_i].append({
-                    "path_id": path_id,
-                    "think": think,
-                    "search_query": search_query,
-                    "refined_information": info,
-                    "selected_doc_ids": selected_doc_ids,
-                })
-                refine_prompts_by_sample[sample_i].append(refine_prompts[idx])
-                retrieved_by_sample[sample_i].append(
-                    docs_map.get((sample_i, path_id), []))
 
             for sample_i in active_indices:
-                refined_paths = refined_paths_by_sample[sample_i]
-                if not refined_paths:
+                sample_path_plans = path_plans_by_sample[sample_i]
+                if not sample_path_plans:
+                    continue
+                sample_query_plans = [
+                    plan for plan in sample_path_plans if plan["search_query"]
+                ]
+                if not sample_query_plans:
                     continue
 
+                retrieved_by_sample[sample_i] = [
+                    docs_map.get((sample_i, plan["path_id"]), [])
+                    for plan in sample_query_plans
+                ]
+                pooled_docs = self._pool_documents(sample_query_plans,
+                                                   docs_map,
+                                                   sample_i)
+                pooled_docs_by_sample[sample_i] = pooled_docs
+
+                refined_paths_by_sample[sample_i] = [{
+                    "path_id": plan["path_id"],
+                    "direction_id": plan["direction_id"],
+                    "direction": plan["direction"],
+                    "think": plan["path_agent_think"],
+                    "search_query": plan["search_query"],
+                    "refined_information": "",
+                    "selected_doc_ids": [
+                        doc["doc_id"] for doc in pooled_docs
+                        if plan["direction_id"] in doc["sources"]
+                    ],
+                } for plan in sample_query_plans]
+
+                refine_prompt = self._build_global_refine_agent_prompt(
+                    question=questions[sample_i],
+                    navigator_think=results[sample_i]["navigator_thoughts"][-1],
+                    directions=directions_by_sample[sample_i],
+                    path_plans=sample_query_plans,
+                    pooled_docs=pooled_docs,
+                )
+                refine_prompts.append(refine_prompt)
+                refine_meta.append((sample_i,
+                                    self._prompt_to_text(refine_prompt),
+                                    [doc["doc_id"] for doc in pooled_docs],
+                                    [plan["direction_id"]
+                                     for plan in sample_query_plans]))
+
+            refine_outputs = self._generate_text_batch(refine_prompts,
+                                                       refine_config)
+
+            for idx, refine_output in enumerate(refine_outputs):
+                sample_i, refine_prompt_text, _, _ = refine_meta[idx]
+                info = self._parse_info(refine_output)
+                results[sample_i]["refine_prompts"].append(
+                    [refine_prompt_text])
+                results[sample_i]["global_refinements"].append(info)
+                results[sample_i]["refined_paths"].append(
+                    refined_paths_by_sample[sample_i])
                 results[sample_i]["retrieved_docs"].append(
                     retrieved_by_sample[sample_i])
-                results[sample_i]["refine_prompts"].append(
-                    [self._prompt_to_text(p)
-                     for p in refine_prompts_by_sample[sample_i]])
-                results[sample_i]["refined_paths"].append(refined_paths)
+                results[sample_i]["pooled_docs"].append(
+                    pooled_docs_by_sample[sample_i])
+                refinement_histories[sample_i].append(info)
+                results[sample_i]["navigator_pormpts"].append(
+                    self._build_refinement_appendix(iteration_idx + 1, info))
 
-                dialogue_states[sample_i] += self._build_parallel_appendix(
-                    refined_paths)
+            for sample_i in active_indices:
+                if not pooled_docs_by_sample[sample_i] and not completed[sample_i]:
+                    completed[sample_i] = True
 
         for idx, result in enumerate(results):
             if result["final_answer"]:
                 continue
-            if result["raw_outputs"]:
-                tail = result["raw_outputs"][-1]
-                parsed = self._parse_answer(tail)
-                result["final_answer"] = parsed if parsed else tail.strip()
+
+            final_prompt = self._build_final_answer_prompt(
+                question=questions[idx],
+                historical_refinements=refinement_histories[idx])
+            if not result["navigator_pormpts"]:
+                result["navigator_pormpts"].append(
+                    self._prompt_to_text(final_prompt))
+            final_outputs = self._generate_text_batch(
+                [final_prompt],
+                self._make_config(max_tokens=self.synthesize_max_tokens,
+                                  temperature=self.synthesize_temperature,
+                                  top_p=self.synthesize_top_p))
+            final_output = final_outputs[0] if final_outputs else ""
+            result["navigator_pormpts"].append(final_output)
+            parsed = self._parse_answer(final_output)
+            if parsed:
+                result["final_answer"] = parsed
+            elif final_output:
+                result["final_answer"] = final_output.strip()
             else:
                 result["final_answer"] = ""
 
