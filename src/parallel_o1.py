@@ -12,8 +12,6 @@ SEARCH_TAG_PATTERN = re.compile(r"<search>(.*?)</search>",
                                 flags=re.DOTALL | re.IGNORECASE)
 ANSWER_TAG_PATTERN = re.compile(r"<answer>(.*?)</answer>",
                                 flags=re.DOTALL | re.IGNORECASE)
-INFO_TAG_PATTERN = re.compile(r"<information>(.*?)</information>",
-                              flags=re.DOTALL | re.IGNORECASE)
 SEARCH_DIRECTIONS_PATTERN = re.compile(r"<search_directions>(.*?)</search_directions>",
                                        flags=re.DOTALL | re.IGNORECASE)
 DIRECTION_TAG_PATTERN = re.compile(r"<direction(?:\s+id=[\"']?(.*?)[\"']?)?>(.*?)</direction>",
@@ -250,6 +248,14 @@ class ParallelO1:
             return "\n".join(chunks)
         return str(prompt)
 
+    def _format_external_context(self, label: str, content: str) -> str:
+        cleaned = (content or "").strip()
+        if not cleaned:
+            cleaned = "None"
+        if "\n" in cleaned:
+            return f"{label}:\n```\n{cleaned}\n```"
+        return f"{label}: `{cleaned}`"
+
     def _generate_text_batch(self, prompts: List[Any],
                              config: SimpleNamespace) -> List[str]:
         if not prompts:
@@ -298,7 +304,7 @@ class ParallelO1:
         ]) if historical_refinements else "None"
 
         system_prompt = (
-            "You are a navigator agent in a multi-stage retrieval reasoning system for answer the user's question. "
+            "You are a navigator agent in a multi-stage retrieval reasoning system to answer the user's question. "
             "You receive the original question and the historical global refinement reports R_<i>. "
             "You must first think globally inside <think>...</think>. "
             "If the available information is sufficient, output the final concise short answer inside <answer>...</answer>. "
@@ -308,29 +314,34 @@ class ParallelO1:
             "Each direction should explicitly describe the entity, relation, attribute, and the information gap that needs to be filled. "
             "You may produce as many directions as needed for this round."
         )
-        user_prompt = (
-            f"Original Question: {question}\n\n"
-            f"Historical Refined Information R_<i>:\n{history_block}\n\n"
-            "Decide whether to answer now or propose the next retrieval directions."
-        )
+        user_prompt = "\n\n".join([
+            self._format_external_context("Original Question", question),
+            self._format_external_context("Historical Refined Information R_<i>",
+                                          history_block),
+            "Decide whether to answer now or propose the next retrieval directions.",
+        ])
         return self._to_prompt(system_prompt, user_prompt)
 
     def _build_path_agent_prompt(self, original_question: str,
                                  navigator_think: str,
                                  direction: SearchDirection) -> Any:
         system_prompt = (
-            "You are a helpful assistant that help Navigator Agent to answer user's question"
-            "You will receive the original question, the Navigator Agent's current global thoughts, and one assigned retrieval direction by Navigator Agent. "
-            "Your task is to convert the abstract direction into one concrete search-engine-friendly query. "
+            "You are a helpful assistant that help Navigator Agent to answer user's question. "
+            "You will receive the original question, the Navigator Agent's current  thoughts, and one assigned retrieval direction by Navigator Agent. "
+            "Your task is to convert the abstract retrieval direction into one concrete search-engine-friendly query. "
             "You must reason locally inside <think>...</think> and then output exactly one search query inside <search>...</search>. "
             "The query should be precise, operational, and directly aligned with the assigned direction."
         )
-        user_prompt = (
-            f"Original Question: {original_question}\n"
-            f"Navigator Thinking T_i: {navigator_think}\n"
-            f"Assigned Direction {direction['direction_id']}: {direction['direction']}\n\n"
-            "Think about above information and generate one concrete search query for this direction."
-        )
+        user_prompt = "\n\n".join([
+            self._format_external_context(
+                "Original Question", original_question),
+            self._format_external_context(
+                "Navigator Thinking", navigator_think),
+            self._format_external_context(
+                f"Assigned Direction {direction['direction_id']}",
+                direction["direction"]),
+            "Now think about above information and put your search query in <search>...</search>",
+        ])
         return self._to_prompt(system_prompt, user_prompt)
 
     def _build_global_refine_agent_prompt(self,
@@ -345,7 +356,7 @@ class ParallelO1:
         ]) if directions else "None"
 
         query_block = "\n".join([
-            f"- Direction {plan['direction_id']} | Search Query: {plan['search_query']}"
+            f"- Direction to Search : {plan['direction_id']} | Search Query: {plan['search_query']}"
             for plan in path_plans
         ]) if path_plans else "None"
 
@@ -361,29 +372,42 @@ class ParallelO1:
         ]) if pooled_docs else "No documents in the pooled knowledge base."
 
         system_prompt = (
-            "You are the Global Refine Agent. "
-            "You receive the original question, this round's direction set, the concrete queries used by the Path Agents, and a deduplicated global document pool with provenance metadata. "
-            "Your job is to read all pooled documents jointly, cross-validate facts across directions, resolve overlaps, highlight conflicts if any, and produce one compact but information-dense global refinement report R_i. "
-            "Output exactly one <information>...</information> block. "
-            "The report should be structured, factual, and useful for the next Navigator iteration."
+            "You are the Global Refine Agent.\n"
+            "You are tasked with reading and analyzing document pool based on the following inputs: the original question, this round's direction set, the concrete queries used by the Path Agents, and a global document pool with provenance metadata.\n"
+            "Your objective is to extract relevant and helpful information for Current Search Query from the Searched document pool and seamlessly integrate this information into the Previous Reasoning Steps to continue reasoning for the original question.  Guidelines:\n"
+            "1. Analyze the Searched document pool:\n"
+            "  - Carefully review the content of each searched web page.\n"
+            "  - Identify factual information that is relevant to the Current Search Query and can aid in the reasoning process for the original question.\n"
+            "2. Extract Relevant Information:\n"
+            "  - Select the information from the Searched document pool that  directly contributes to advancing the Previous Reasoning  Steps.\n"
+            "  - Ensure that the extracted information is accurate and relevant.\n"
+            "3. Output Format: "
+            "  - If the document pool provide helpful information for current search query: Present the information beginning with `Final Information` as shown below.\n"
+            "Final Information[Helpful information here]\n"
+            "  - If the document pool do not provide any helpful information for current search query: Output the following text.\n"
+            "Final Information No helpful information found.\n\n"
+            "Inputs:"
         )
-        user_prompt = (
-            f"Original Question: {question}\n"
-            f"Navigator Thinking T_i: {navigator_think}\n\n"
-            f"Directions:\n{direction_block}\n\n"
-            f"Concrete Queries:\n{query_block}\n\n"
-            f"Deduplicated Global Document Pool:\n{docs_block}\n\n"
-            "Produce the global refinement report R_i now."
-        )
+        user_prompt = "\n\n".join([
+            self._format_external_context("Original Question", question),
+            self._format_external_context(
+                "Previous Navigator Thinking", navigator_think),
+            self._format_external_context(
+                "Search Directions", direction_block),
+            self._format_external_context(
+                "Concrete Search Queries", query_block),
+            self._format_external_context(
+                "Global Document Pool", docs_block),
+            "Now you should analyze each web page and find  helpful information based on the original question, this round's direction set, the concrete queries, and a global document pool with provenance metadata.",
+        ])
         return self._to_prompt(system_prompt, user_prompt)
 
-    def _build_refinement_appendix(self, iteration_idx: int,
+    def _build_refinement_appendix(self,
                                    report: str) -> str:
         return (
             "\n<information>\n"
-            f"Global Refinement Report R_{iteration_idx}:\n"
-            f"{report}\n"
-            "</information>\n"
+            f"{report}"
+            "\n</information>\n"
         )
 
     def _build_final_answer_prompt(self, question: str,
@@ -397,10 +421,11 @@ class ParallelO1:
             "Use the historical global refinement reports to provide the best final answer now. "
             "Output only the concise final answer inside <answer>...</answer>."
         )
-        user_prompt = (
-            f"Original Question: {question}\n\n"
-            f"Historical Global Refinements:\n{history_block}"
-        )
+        user_prompt = "\n\n".join([
+            self._format_external_context("Original Question", question),
+            self._format_external_context(
+                "Historical Global Refinements", history_block),
+        ])
         return self._to_prompt(system_prompt, user_prompt)
 
     def _make_doc_key(self, doc: RetrieverDocument) -> str:
@@ -442,10 +467,6 @@ class ParallelO1:
 
     def _parse_answer(self, text: str) -> str:
         return self._extract_last_tag(ANSWER_TAG_PATTERN, text)
-
-    def _parse_info(self, text: str) -> str:
-        extracted = self._extract_last_tag(INFO_TAG_PATTERN, text)
-        return extracted if extracted else text.strip()
 
     def run(self, question: str, max_iterations: int = 4) -> ParallelO1Result:
         return self.run_batch([question], max_iterations=max_iterations)[0]
@@ -650,24 +671,24 @@ class ParallelO1:
                                     [plan["direction_id"]
                                      for plan in sample_query_plans]))
 
-            refine_outputs = self._generate_text_batch(refine_prompts,
-                                                       refine_config)
+            refine_agent_outputs = self._generate_text_batch(refine_prompts,
+                                                             refine_config)
 
-            for idx, refine_output in enumerate(refine_outputs):
+            for idx, refine_agent_output in enumerate(refine_agent_outputs):
                 sample_i, refine_prompt_text, _, _ = refine_meta[idx]
-                info = self._parse_info(refine_output)
                 results[sample_i]["refine_prompts"].append(
                     [refine_prompt_text])
-                results[sample_i]["global_refinements"].append(info)
+                results[sample_i]["global_refinements"].append(
+                    refine_agent_output)
                 results[sample_i]["refined_paths"].append(
                     refined_paths_by_sample[sample_i])
                 results[sample_i]["retrieved_docs"].append(
                     retrieved_by_sample[sample_i])
                 results[sample_i]["pooled_docs"].append(
                     pooled_docs_by_sample[sample_i])
-                refinement_histories[sample_i].append(info)
+                refinement_histories[sample_i].append(refine_agent_output)
                 results[sample_i]["navigator_pormpts"].append(
-                    self._build_refinement_appendix(iteration_idx + 1, info))
+                    self._build_refinement_appendix(refine_agent_output))
 
             for sample_i in active_indices:
                 if not pooled_docs_by_sample[sample_i] and not completed[sample_i]:

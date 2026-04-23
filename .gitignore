@@ -5,3 +5,4 @@ retrieval-server/
 Search-o1/
 tmp/
 */__pycache__/
+bash/vllm.sh

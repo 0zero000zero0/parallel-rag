@@ -10,7 +10,7 @@ OPENAI_API_KEY="TEST"
 MODEL="Qwen3-32B"
 NUM_SAMPLES=1024
 DATASETS=(
-  bamboogle
+  # bamboogle
   2wikimultihopqa
   hotpotqa
   musique
@@ -18,6 +18,7 @@ DATASETS=(
   popqa
   triviaqa
   ambigqa
+  gpqa
 )
 
 for dataset in "${DATASETS[@]}"; do
@@ -65,7 +66,8 @@ for dataset in "${DATASETS[@]}"; do
     --refine_top_p 0.8 \
     --max_iterations 5 \
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
-    --num_samples "$NUM_SAMPLES"
+    --num_samples "$NUM_SAMPLES" \
+    --use_chat_template
 
   if [[ ! -f "$result_file" ]]; then
     echo "[All] ERROR: result file not found after run_parallel_o1.py: $result_file" >&2

@@ -14,6 +14,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Parallel o1 runner")
     parser.add_argument("--input_file", type=str, required=True,
                         help="Path to input jsonlines test file")
+    parser.add_argument("--result_file", type=str, default=None,
+                        help="Path to results jsonlines file")
     parser.add_argument("--batch_size", type=int, default=512,
                         help="Batch size for batched testing")
 
@@ -62,11 +64,6 @@ def main() -> None:
                                   method_name="parallel-o1",
                                   model_name=args.model)
     dataset_name = input_file_path.parent.name
-    output_file_path = output_dir / f"{dataset_name}.jsonl"
-    config_file_path = output_dir / "config.json"
-
-    with config_file_path.open("w", encoding="utf-8") as f:
-        json.dump(vars(args), f, ensure_ascii=False, indent=4)
 
     samples = read_jsonlines(input_file_path)
     if args.num_samples is not None:
@@ -114,6 +111,13 @@ def main() -> None:
                 "pipeline_result": result,
             })
 
+    if args.result_file:
+        output_file_path = Path(args.result_file)
+    else:
+        output_file_path = output_dir / f"{dataset_name}.jsonl"
+        config_file_path = output_dir / "config.json"
+        with config_file_path.open("w", encoding="utf-8") as f:
+            json.dump(vars(args), f, ensure_ascii=False, indent=0)
     write_jsonlines(output_file_path, output_records)
 
 
