@@ -36,13 +36,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--docs_per_query", type=int, default=5)
 
-    parser.add_argument("--navigator_max_tokens", type=int, default=256)
-    parser.add_argument("--navigator_temperature", type=float, default=0.6)
-    parser.add_argument("--navigator_top_p", type=float, default=0.9)
+    parser.add_argument("--navigator_agent_max_tokens", type=int, default=256)
+    parser.add_argument("--navigator_agent_temperature",
+                        type=float, default=0.6)
+    parser.add_argument("--navigator_agent_top_p", type=float, default=0.9)
 
-    parser.add_argument("--path_max_tokens", type=int, default=512)
-    parser.add_argument("--path_temperature", type=float, default=0.8)
-    parser.add_argument("--path_top_p", type=float, default=0.9)
+    parser.add_argument("--path_agent_max_tokens", type=int, default=512)
+    parser.add_argument("--path_agent_temperature", type=float, default=0.8)
+    parser.add_argument("--path_agent_top_p", type=float, default=0.9)
 
     parser.add_argument("--refine_max_tokens", type=int, default=1024)
     parser.add_argument("--refine_temperature", type=float, default=0.8)

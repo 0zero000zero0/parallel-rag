@@ -28,7 +28,7 @@ class PathPlan(TypedDict):
     path_id: int
     direction_id: str
     direction: str
-    navigator_think: str
+    navigator_agent_think: str
     path_agent_think: str
     search_query: str
 
@@ -55,8 +55,8 @@ class ParallelO1Result(TypedDict):
     query: str
     max_iterations: int
     executed_iterations: int
-    navigator_pormpts: List[str]
-    navigator_thoughts: List[str]
+    navigator_agent_pormpts: List[str]
+    navigator_agent_thoughts: List[str]
     search_directions: List[List[SearchDirection]]
     path_plans: List[List[PathPlan]]
     retrieved_docs: List[BatchSearchDocs]
@@ -72,9 +72,9 @@ class ParallelO1:
                  retriever: RetrieverClient,
                  llm_client: OpenAIClient,
                  docs_per_query: int = 3,
-                 navigator_max_tokens: int = 256,
-                 navigator_temperature: float = 0.6,
-                 navigator_top_p: float = 0.9,
+                 navigator_agent_max_tokens: int = 256,
+                 navigator_agent_temperature: float = 0.6,
+                 navigator_agent_top_p: float = 0.9,
                  path_max_tokens: int = 384,
                  path_temperature: float = 0.8,
                  path_top_p: float = 0.95,
@@ -93,9 +93,9 @@ class ParallelO1:
         self.retriever = retriever
         self.llm_client = llm_client
         self.docs_per_query = max(1, docs_per_query)
-        self.navigator_max_tokens = navigator_max_tokens
-        self.navigator_temperature = navigator_temperature
-        self.navigator_top_p = navigator_top_p
+        self.navigator_agent_max_tokens = navigator_agent_max_tokens
+        self.navigator_agent_temperature = navigator_agent_temperature
+        self.navigator_agent_top_p = navigator_agent_top_p
         self.path_max_tokens = path_max_tokens
         self.path_temperature = path_temperature
         self.path_top_p = path_top_p
@@ -148,10 +148,12 @@ class ParallelO1:
 
         docs_per_query = int(getattr(args, "docs_per_query", 3))
 
-        navigator_max_tokens = int(getattr(args, "navigator_max_tokens", 256))
-        navigator_temperature = float(
-            getattr(args, "navigator_temperature", 0.6))
-        navigator_top_p = float(getattr(args, "navigator_top_p", 0.9))
+        navigator_agent_max_tokens = int(
+            getattr(args, "navigator_agent_max_tokens", 256))
+        navigator_agent_temperature = float(
+            getattr(args, "navigator_agent_temperature", 0.6))
+        navigator_agent_top_p = float(
+            getattr(args, "navigator_agent_top_p", 0.9))
 
         path_max_tokens = int(getattr(args, "path_max_tokens", 384))
         path_temperature = float(getattr(args, "path_temperature", 0.8))
@@ -187,9 +189,9 @@ class ParallelO1:
         return cls(retriever=retriever_client,
                    llm_client=llm_client,
                    docs_per_query=docs_per_query,
-                   navigator_max_tokens=navigator_max_tokens,
-                   navigator_temperature=navigator_temperature,
-                   navigator_top_p=navigator_top_p,
+                   navigator_agent_max_tokens=navigator_agent_max_tokens,
+                   navigator_agent_temperature=navigator_agent_temperature,
+                   navigator_agent_top_p=navigator_agent_top_p,
                    path_max_tokens=path_max_tokens,
                    path_temperature=path_temperature,
                    path_top_p=path_top_p,
@@ -304,7 +306,7 @@ class ParallelO1:
         ]) if historical_refinements else "None"
 
         system_prompt = (
-            "You are a navigator agent in a multi-stage retrieval reasoning system to answer the user's question. "
+            "You are a navigator_agent agent in a multi-stage retrieval reasoning system to answer the user's question. "
             "You receive the original question and the historical global refinement reports R_<i>. "
             "You must first think globally inside <think>...</think>. "
             "If the available information is sufficient, output the final concise short answer inside <answer>...</answer>. "
@@ -323,11 +325,11 @@ class ParallelO1:
         return self._to_prompt(system_prompt, user_prompt)
 
     def _build_path_agent_prompt(self, original_question: str,
-                                 navigator_think: str,
+                                 navigator_agent_think: str,
                                  direction: SearchDirection) -> Any:
         system_prompt = (
-            "You are a helpful assistant that help Navigator Agent to answer user's question. "
-            "You will receive the original question, the Navigator Agent's current  thoughts, and one assigned retrieval direction by Navigator Agent. "
+            "You are a helpful assistant that help navigator_agent Agent to answer user's question. "
+            "You will receive the original question, the navigator_agent Agent's current  thoughts, and one assigned retrieval direction by navigator_agent Agent. "
             "Your task is to convert the abstract retrieval direction into one concrete search-engine-friendly query. "
             "You must reason locally inside <think>...</think> and then output exactly one search query inside <search>...</search>. "
             "The query should be precise, operational, and directly aligned with the assigned direction."
@@ -336,7 +338,7 @@ class ParallelO1:
             self._format_external_context(
                 "Original Question", original_question),
             self._format_external_context(
-                "Navigator Thinking", navigator_think),
+                "navigator_agent Thinking", navigator_agent_think),
             self._format_external_context(
                 f"Assigned Direction {direction['direction_id']}",
                 direction["direction"]),
@@ -346,7 +348,7 @@ class ParallelO1:
 
     def _build_global_refine_agent_prompt(self,
                                           question: str,
-                                          navigator_think: str,
+                                          navigator_agent_think: str,
                                           directions: List[SearchDirection],
                                           path_plans: List[PathPlan],
                                           pooled_docs: List[PooledDocument]) -> Any:
@@ -391,7 +393,7 @@ class ParallelO1:
         user_prompt = "\n\n".join([
             self._format_external_context("Original Question", question),
             self._format_external_context(
-                "Previous Navigator Thinking", navigator_think),
+                "Previous navigator_agent Thinking", navigator_agent_think),
             self._format_external_context(
                 "Search Directions", direction_block),
             self._format_external_context(
@@ -417,7 +419,7 @@ class ParallelO1:
             for idx, report in enumerate(historical_refinements)
         ]) if historical_refinements else "None"
         system_prompt = (
-            "You are the Navigator Agent. "
+            "You are the navigator_agent Agent. "
             "Use the historical global refinement reports to provide the best final answer now. "
             "Output only the concise final answer inside <answer>...</answer>."
         )
@@ -468,23 +470,18 @@ class ParallelO1:
     def _parse_answer(self, text: str) -> str:
         return self._extract_last_tag(ANSWER_TAG_PATTERN, text)
 
-    def run(self, question: str, max_iterations: int = 4) -> ParallelO1Result:
-        return self.run_batch([question], max_iterations=max_iterations)[0]
-
-    def run_batch(self,
-                  questions: List[str],
-                  max_iterations: int = 4) -> List[ParallelO1Result]:
-        if not questions:
-            return []
-
+    def _init_batch_runtime(self,
+                            questions: List[str],
+                            max_iterations: int) -> tuple[List[bool], List[ParallelO1Result], List[List[str]]]:
+        """Initialize per-sample runtime states for batched execution."""
         completed = [False] * len(questions)
 
         results: List[ParallelO1Result] = [{
             "query": q,
             "max_iterations": max_iterations,
             "executed_iterations": 0,
-            "navigator_pormpts": [],
-            "navigator_thoughts": [],
+            "navigator_agent_pormpts": [],
+            "navigator_agent_thoughts": [],
             "search_directions": [],
             "path_plans": [],
             "retrieved_docs": [],
@@ -495,11 +492,30 @@ class ParallelO1:
             "final_answer": "",
         } for q in questions]
 
+        # Keep historical global refinements R_<i> for each sample.
         refinement_histories: List[List[str]] = [[] for _ in questions]
+        return completed, results, refinement_histories
 
-        navigator_config = self._make_config(max_tokens=self.navigator_max_tokens,
-                                             temperature=self.navigator_temperature,
-                                             top_p=self.navigator_top_p)
+    def run(self, question: str, max_iterations: int = 4) -> ParallelO1Result:
+        return self.run_batch([question], max_iterations=max_iterations)[0]
+
+    def run_batch(self,
+                  questions: List[str],
+                  max_iterations: int = 4) -> List[ParallelO1Result]:
+        # -----------------------------
+        # Phase 0: Runtime initialization
+        # -----------------------------
+        if not questions:
+            return []
+
+        completed, results, refinement_histories = self._init_batch_runtime(
+            questions=questions,
+            max_iterations=max_iterations)
+
+        # Static generation configs used in each stage.
+        navigator_agent_config = self._make_config(max_tokens=self.navigator_agent_max_tokens,
+                                                   temperature=self.navigator_agent_temperature,
+                                                   top_p=self.navigator_agent_top_p)
         path_config = self._make_config(max_tokens=self.path_max_tokens,
                                         temperature=self.path_temperature,
                                         top_p=self.path_top_p)
@@ -508,6 +524,9 @@ class ParallelO1:
                                           top_p=self.refine_top_p)
 
         for iteration_idx in range(max_iterations):
+            # -----------------------------
+            # Phase 1: Navigator planning
+            # -----------------------------
             active_indices = [i for i, c in enumerate(completed) if not c]
             if not active_indices:
                 break
@@ -518,9 +537,10 @@ class ParallelO1:
                     historical_refinements=refinement_histories[i])
                 for i in active_indices
             ]
-            navigator_outputs = self._generate_text_batch(active_prompts,
-                                                          navigator_config)
+            navigator_agent_outputs = self._generate_text_batch(active_prompts,
+                                                                navigator_agent_config)
 
+            # Collect path-dispatch inputs from Navigator outputs.
             path_generation_prompts: List[Any] = []
             path_meta: List[tuple[int, int, str, str, str, str]] = []
             path_plans_by_sample: List[List[PathPlan]] = [
@@ -531,24 +551,26 @@ class ParallelO1:
             ]
 
             for local_i, sample_i in enumerate(active_indices):
-                navigator_output = navigator_outputs[local_i]
-                if not results[sample_i]["navigator_pormpts"]:
-                    results[sample_i]["navigator_pormpts"].append(
+                navigator_agent_output = navigator_agent_outputs[local_i]
+                if not results[sample_i]["navigator_agent_pormpts"]:
+                    results[sample_i]["navigator_agent_pormpts"].append(
                         self._prompt_to_text(active_prompts[local_i]))
-                results[sample_i]["navigator_pormpts"].append(
-                    navigator_output)
+                results[sample_i]["navigator_agent_pormpts"].append(
+                    navigator_agent_output)
                 results[sample_i]["executed_iterations"] += 1
-                navigator_think = self._extract_think(navigator_output)
-                results[sample_i]["navigator_thoughts"].append(
-                    navigator_think)
+                navigator_agent_think = self._extract_think(
+                    navigator_agent_output)
+                results[sample_i]["navigator_agent_thoughts"].append(
+                    navigator_agent_think)
 
-                answer = self._parse_answer(navigator_output)
+                answer = self._parse_answer(navigator_agent_output)
                 if answer:
                     results[sample_i]["final_answer"] = answer
                     completed[sample_i] = True
                     continue
 
-                directions = self._parse_search_directions(navigator_output)
+                directions = self._parse_search_directions(
+                    navigator_agent_output)
                 results[sample_i]["search_directions"].append(directions)
                 directions_by_sample[sample_i] = directions
                 if not directions:
@@ -558,17 +580,20 @@ class ParallelO1:
                 for path_id, direction in enumerate(directions, start=1):
                     path_prompt = self._build_path_agent_prompt(
                         original_question=questions[sample_i],
-                        navigator_think=navigator_think,
+                        navigator_agent_think=navigator_agent_think,
                         direction=direction)
                     path_generation_prompts.append(path_prompt)
                     path_meta.append(
                         (sample_i, path_id, direction["direction_id"],
-                         direction["direction"], navigator_think,
+                         direction["direction"], navigator_agent_think,
                          self._prompt_to_text(path_prompt)))
 
             if not path_generation_prompts:
                 continue
 
+            # -----------------------------
+            # Phase 2: Path-agent concretization
+            # -----------------------------
             path_outputs = self._generate_text_batch(path_generation_prompts,
                                                      path_config)
 
@@ -576,7 +601,7 @@ class ParallelO1:
             query_meta: List[tuple[int, int]] = []
 
             for idx, path_output in enumerate(path_outputs):
-                sample_i, path_id, direction_id, direction_text, navigator_think, path_prompt_text = path_meta[
+                sample_i, path_id, direction_id, direction_text, navigator_agent_think, path_prompt_text = path_meta[
                     idx]
                 path_agent_think = self._extract_think(path_output)
                 path_agent_queries = self._extract_searches(path_output)
@@ -586,7 +611,7 @@ class ParallelO1:
                     "path_id": path_id,
                     "direction_id": direction_id,
                     "direction": direction_text,
-                    "navigator_think": navigator_think,
+                    "navigator_agent_think": navigator_agent_think,
                     "path_agent_think": path_agent_think,
                     "search_query": path_agent_query,
                 }
@@ -606,6 +631,9 @@ class ParallelO1:
                     completed[sample_i] = True
                 continue
 
+            # -----------------------------
+            # Phase 3: Retrieval + global pooling
+            # -----------------------------
             flat_docs = self.retriever.batch_search(flat_queries)
 
             docs_map: dict[tuple[int, int], List[RetrieverDocument]] = {}
@@ -625,6 +653,7 @@ class ParallelO1:
                 [] for _ in range(len(questions))
             ]
 
+            # Build one global-refine prompt for each active sample.
             for sample_i in active_indices:
                 sample_path_plans = path_plans_by_sample[sample_i]
                 if not sample_path_plans:
@@ -659,7 +688,7 @@ class ParallelO1:
 
                 refine_prompt = self._build_global_refine_agent_prompt(
                     question=questions[sample_i],
-                    navigator_think=results[sample_i]["navigator_thoughts"][-1],
+                    navigator_agent_think=results[sample_i]["navigator_agent_thoughts"][-1],
                     directions=directions_by_sample[sample_i],
                     path_plans=sample_query_plans,
                     pooled_docs=pooled_docs,
@@ -671,6 +700,9 @@ class ParallelO1:
                                     [plan["direction_id"]
                                      for plan in sample_query_plans]))
 
+            # -----------------------------
+            # Phase 4: Global refinement and context update
+            # -----------------------------
             refine_agent_outputs = self._generate_text_batch(refine_prompts,
                                                              refine_config)
 
@@ -687,13 +719,16 @@ class ParallelO1:
                 results[sample_i]["pooled_docs"].append(
                     pooled_docs_by_sample[sample_i])
                 refinement_histories[sample_i].append(refine_agent_output)
-                results[sample_i]["navigator_pormpts"].append(
+                results[sample_i]["navigator_agent_pormpts"].append(
                     self._build_refinement_appendix(refine_agent_output))
 
             for sample_i in active_indices:
                 if not pooled_docs_by_sample[sample_i] and not completed[sample_i]:
                     completed[sample_i] = True
 
+        # -----------------------------
+        # Phase 5: Final answer synthesis
+        # -----------------------------
         for idx, result in enumerate(results):
             if result["final_answer"]:
                 continue
@@ -701,8 +736,8 @@ class ParallelO1:
             final_prompt = self._build_final_answer_prompt(
                 question=questions[idx],
                 historical_refinements=refinement_histories[idx])
-            if not result["navigator_pormpts"]:
-                result["navigator_pormpts"].append(
+            if not result["navigator_agent_pormpts"]:
+                result["navigator_agent_pormpts"].append(
                     self._prompt_to_text(final_prompt))
             final_outputs = self._generate_text_batch(
                 [final_prompt],
@@ -710,7 +745,7 @@ class ParallelO1:
                                   temperature=self.synthesize_temperature,
                                   top_p=self.synthesize_top_p))
             final_output = final_outputs[0] if final_outputs else ""
-            result["navigator_pormpts"].append(final_output)
+            result["navigator_agent_pormpts"].append(final_output)
             parsed = self._parse_answer(final_output)
             if parsed:
                 result["final_answer"] = parsed
