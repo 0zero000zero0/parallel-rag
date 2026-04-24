@@ -3,6 +3,11 @@ import re
 from types import SimpleNamespace
 from typing import Any, List, TypedDict
 
+from src.baseline_base import (PromptedGenerationBase,
+                               build_openai_client_from_args,
+                               build_retriever_client_from_args,
+                               parse_stop_tokens,
+                               resolve_chat_template_components)
 from src.clients import (BatchSearchDocs, OpenAIClient, RetrieverClient,
                          RetrieverDocument)
 
@@ -67,31 +72,34 @@ class ParallelO1Result(TypedDict):
     final_answer: str
 
 
-class ParallelO1:
+class ParallelO1(PromptedGenerationBase):
     def __init__(self,
                  retriever: RetrieverClient,
                  llm_client: OpenAIClient,
                  docs_per_query: int = 3,
-                 navigator_agent_max_tokens: int = 256,
+                 navigator_agent_max_tokens: int = 512,
                  navigator_agent_temperature: float = 0.6,
                  navigator_agent_top_p: float = 0.9,
-                 path_max_tokens: int = 384,
+                 path_max_tokens: int = 512,
                  path_temperature: float = 0.8,
                  path_top_p: float = 0.95,
-                 refine_max_tokens: int = 384,
+                 refine_max_tokens: int = 512,
                  refine_temperature: float = 0.2,
                  refine_top_p: float = 0.9,
-                 summarize_max_tokens: int = 512,
-                 summarize_temperature: float = 0.3,
-                 summarize_top_p: float = 0.9,
-                 synthesize_max_tokens: int = 768,
+                 synthesize_max_tokens: int = 512,
                  synthesize_temperature: float = 0.3,
                  synthesize_top_p: float = 0.9,
                  stop_tokens: List[str] | None = None,
                  use_chat_template: bool = False,
                  tokenizer: Any = None):
+        super().__init__(llm_client=llm_client,
+                         generation_max_tokens=synthesize_max_tokens,
+                         generation_temperature=synthesize_temperature,
+                         generation_top_p=synthesize_top_p,
+                         stop_tokens=stop_tokens,
+                         use_chat_template=use_chat_template,
+                         tokenizer=tokenizer)
         self.retriever = retriever
-        self.llm_client = llm_client
         self.docs_per_query = max(1, docs_per_query)
         self.navigator_agent_max_tokens = navigator_agent_max_tokens
         self.navigator_agent_temperature = navigator_agent_temperature
@@ -102,49 +110,16 @@ class ParallelO1:
         self.refine_max_tokens = refine_max_tokens
         self.refine_temperature = refine_temperature
         self.refine_top_p = refine_top_p
-        self.summarize_max_tokens = summarize_max_tokens
-        self.summarize_temperature = summarize_temperature
-        self.summarize_top_p = summarize_top_p
         self.synthesize_max_tokens = synthesize_max_tokens
         self.synthesize_temperature = synthesize_temperature
         self.synthesize_top_p = synthesize_top_p
-        self.stop_tokens = stop_tokens or []
-
-        self.use_chat_template = use_chat_template
-        self.tokenizer = tokenizer
-        self.llm_client.use_chat_template = use_chat_template
-        if self.use_chat_template and self.tokenizer is None:
-            raise ValueError(
-                "tokenizer is required when use_chat_template=True")
 
     @classmethod
     def from_args(cls, args) -> "ParallelO1":
-        retriever_base_url = getattr(
-            args, "retriever_base_url", "http://127.0.0.1:9000")
-        retriever_top_k = int(getattr(args, "retriever_top_k", 5))
-        retriever_timeout = getattr(args, "retriever_timeout", None)
-
-        openai_base_url = getattr(
-            args, "openai_base_url", "http://127.0.0.1:8001")
-        openai_api_key = getattr(args, "openai_api_key", "TEST")
-        model = getattr(args, "model", None) or getattr(
-            args, "llm_model", "Qwen3-14B")
-        llm_timeout = getattr(args, "llm_timeout", None)
-
-        use_chat_template = getattr(args, "use_chat_template", False)
-        if isinstance(use_chat_template, str):
-            use_chat_template = use_chat_template.lower() in {
-                "1", "true", "yes", "y", "on"
-            }
-        else:
-            use_chat_template = bool(use_chat_template)
-
-        tokenizer = getattr(args, "tokenizer", None)
-        model_path = getattr(args, "model_path", None)
-        if use_chat_template and tokenizer is None and model_path:
-            from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(model_path,
-                                                      trust_remote_code=True)
+        use_chat_template, tokenizer = resolve_chat_template_components(args)
+        retriever_client = build_retriever_client_from_args(args)
+        llm_client = build_openai_client_from_args(
+            args, use_chat_template=use_chat_template)
 
         docs_per_query = int(getattr(args, "docs_per_query", 3))
 
@@ -163,29 +138,11 @@ class ParallelO1:
         refine_temperature = float(getattr(args, "refine_temperature", 0.2))
         refine_top_p = float(getattr(args, "refine_top_p", 0.9))
 
-        summarize_max_tokens = int(getattr(args, "summarize_max_tokens", 512))
-        summarize_temperature = float(
-            getattr(args, "summarize_temperature", 0.3))
-        summarize_top_p = float(getattr(args, "summarize_top_p", 0.9))
-
         synthesize_max_tokens = int(
             getattr(args, "synthesize_max_tokens", 768))
         synthesize_temperature = float(
             getattr(args, "synthesize_temperature", 0.3))
         synthesize_top_p = float(getattr(args, "synthesize_top_p", 0.9))
-
-        stop_tokens = getattr(args, "stop_tokens", None)
-        if isinstance(stop_tokens, str):
-            stop_tokens = [token for token in stop_tokens.split(",") if token]
-
-        retriever_client = RetrieverClient(base_url=retriever_base_url,
-                                           top_k=retriever_top_k,
-                                           timeout=retriever_timeout)
-        llm_client = OpenAIClient(base_url=openai_base_url,
-                                  model=model,
-                                  api_key=openai_api_key,
-                                  timeout=llm_timeout,
-                                  use_chat_template=use_chat_template)
         return cls(retriever=retriever_client,
                    llm_client=llm_client,
                    docs_per_query=docs_per_query,
@@ -198,13 +155,10 @@ class ParallelO1:
                    refine_max_tokens=refine_max_tokens,
                    refine_temperature=refine_temperature,
                    refine_top_p=refine_top_p,
-                   summarize_max_tokens=summarize_max_tokens,
-                   summarize_temperature=summarize_temperature,
-                   summarize_top_p=summarize_top_p,
                    synthesize_max_tokens=synthesize_max_tokens,
                    synthesize_temperature=synthesize_temperature,
                    synthesize_top_p=synthesize_top_p,
-                   stop_tokens=stop_tokens,
+                   stop_tokens=parse_stop_tokens(args),
                    use_chat_template=use_chat_template,
                    tokenizer=tokenizer)
 
@@ -215,12 +169,6 @@ class ParallelO1:
                                top_p=top_p,
                                vllm_n=1)
 
-    def _extract_last_tag(self, pattern: re.Pattern[str], text: str) -> str:
-        matches = pattern.findall(text)
-        if not matches:
-            return ""
-        return matches[-1].strip()
-
     def _extract_searches(self, text: str) -> List[str]:
         searches: List[str] = []
         for matched in SEARCH_TAG_PATTERN.findall(text):
@@ -228,35 +176,6 @@ class ParallelO1:
             if q and q not in searches:
                 searches.append(q)
         return searches
-
-    def _to_prompt(self, system_content: str, user_content: str) -> Any:
-        if not self.use_chat_template:
-            return f"{system_content}\n\n{user_content}"
-        return [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": user_content},
-        ]
-
-    def _prompt_to_text(self, prompt: Any) -> str:
-        if isinstance(prompt, str):
-            return prompt
-        if isinstance(prompt, list):
-            chunks: List[str] = []
-            for msg in prompt:
-                if isinstance(msg, dict):
-                    role = str(msg.get("role", ""))
-                    content = str(msg.get("content", ""))
-                    chunks.append(f"[{role}] {content}")
-            return "\n".join(chunks)
-        return str(prompt)
-
-    def _format_external_context(self, label: str, content: str) -> str:
-        cleaned = (content or "").strip()
-        if not cleaned:
-            cleaned = "None"
-        if "\n" in cleaned:
-            return f"{label}:\n```\n{cleaned}\n```"
-        return f"{label}: `{cleaned}`"
 
     def _generate_text_batch(self, prompts: List[Any],
                              config: SimpleNamespace) -> List[str]:

@@ -2,6 +2,11 @@ import re
 from types import SimpleNamespace
 from typing import Any, List, TypedDict
 
+from src.baseline_base import (PromptedGenerationBase,
+                               build_openai_client_from_args,
+                               build_retriever_client_from_args,
+                               parse_stop_tokens,
+                               resolve_chat_template_components)
 from src.clients import (BatchSearchDocs, OpenAIClient, RetrieverClient,
                          RetrieverDocument)
 
@@ -36,7 +41,7 @@ class SearchO1Result(TypedDict):
     final_answer: str
 
 
-class SearchO1:
+class SearchO1(PromptedGenerationBase):
     def __init__(self,
                  retriever: RetrieverClient,
                  llm_client: OpenAIClient,
@@ -48,9 +53,17 @@ class SearchO1:
                  refine_max_tokens: int = 512,
                  refine_temperature: float = 0.7,
                  refine_top_p: float = 0.8,
-                 stop_tokens: List[str] | None = None):
+                 stop_tokens: List[str] | None = None,
+                 use_chat_template: bool = False,
+                 tokenizer: Any = None):
+        super().__init__(llm_client=llm_client,
+                         generation_max_tokens=search_max_tokens,
+                         generation_temperature=search_temperature,
+                         generation_top_p=search_top_p,
+                         stop_tokens=stop_tokens,
+                         use_chat_template=use_chat_template,
+                         tokenizer=tokenizer)
         self.retriever = retriever
-        self.llm_client = llm_client
         self.max_search_limit = max(1, max_search_limit)
         self.docs_per_query = max(1, docs_per_query)
         self.search_max_tokens = search_max_tokens
@@ -59,21 +72,13 @@ class SearchO1:
         self.refine_max_tokens = refine_max_tokens
         self.refine_temperature = refine_temperature
         self.refine_top_p = refine_top_p
-        self.stop_tokens = stop_tokens or []
 
     @classmethod
     def from_args(cls, args) -> "SearchO1":
-        retriever_base_url = getattr(
-            args, "retriever_base_url", "http://127.0.0.1:9000")
-        retriever_top_k = int(getattr(args, "retriever_top_k", 5))
-        retriever_timeout = getattr(args, "retriever_timeout", None)
-
-        openai_base_url = getattr(
-            args, "openai_base_url", "http://127.0.0.1:8001")
-        openai_api_key = getattr(args, "openai_api_key", "TEST")
-        model = getattr(args, "model", None) or getattr(
-            args, "llm_model", "Qwen3-14B")
-        llm_timeout = getattr(args, "llm_timeout", None)
+        use_chat_template, tokenizer = resolve_chat_template_components(args)
+        retriever_client = build_retriever_client_from_args(args)
+        llm_client = build_openai_client_from_args(
+            args, use_chat_template=use_chat_template)
 
         max_search_limit = int(getattr(args, "max_search_limit", 5))
         docs_per_query = int(getattr(args, "docs_per_query", 3))
@@ -85,18 +90,6 @@ class SearchO1:
         refine_max_tokens = int(getattr(args, "refine_max_tokens", 512))
         refine_temperature = float(getattr(args, "refine_temperature", 0.7))
         refine_top_p = float(getattr(args, "refine_top_p", 0.8))
-
-        stop_tokens = getattr(args, "stop_tokens", None)
-        if isinstance(stop_tokens, str):
-            stop_tokens = [token for token in stop_tokens.split(",") if token]
-
-        retriever_client = RetrieverClient(base_url=retriever_base_url,
-                                           top_k=retriever_top_k,
-                                           timeout=retriever_timeout)
-        llm_client = OpenAIClient(base_url=openai_base_url,
-                                  model=model,
-                                  api_key=openai_api_key,
-                                  timeout=llm_timeout)
         return cls(retriever=retriever_client,
                    llm_client=llm_client,
                    max_search_limit=max_search_limit,
@@ -107,7 +100,9 @@ class SearchO1:
                    refine_max_tokens=refine_max_tokens,
                    refine_temperature=refine_temperature,
                    refine_top_p=refine_top_p,
-                   stop_tokens=stop_tokens)
+                   stop_tokens=parse_stop_tokens(args),
+                   use_chat_template=use_chat_template,
+                   tokenizer=tokenizer)
 
     def _make_config(self, max_tokens: int, temperature: float,
                      top_p: float) -> SimpleNamespace:
@@ -115,12 +110,6 @@ class SearchO1:
                                temperature=temperature,
                                top_p=top_p,
                                vllm_n=1)
-
-    def _extract_last_tag(self, pattern: re.Pattern[str], text: str) -> str:
-        matches = pattern.findall(text)
-        if not matches:
-            return ""
-        return matches[-1].strip()
 
     def _extract_search_query(self, text: str) -> str:
         pattern = re.escape(BEGIN_SEARCH_QUERY) + r"(.*?)" + re.escape(
@@ -130,9 +119,9 @@ class SearchO1:
             return ""
         return matches[-1].strip()
 
-    def _build_main_agent_prompt(self, question: str) -> str:
-        return (
-            "You are a reasoning assistant with the ability to perform web searches to help you answer the user\'s question accurately. "
+    def _build_main_agent_prompt(self, question: str) -> Any:
+        system_prompt = (
+            "You are a reasoning assistant with the ability to perform web searches to help you answer the user's question accurately. "
             "You have special tools: To perform a search: write <|begin_search_query|> your query here <|end_search_query|>. "
             "Then, the system will search and analyze relevant web pages, then provide you with helpful information in the format "
             "<|begin_search_result|> ...search results... <|end_search_result|>. "
@@ -140,14 +129,15 @@ class SearchO1:
             f"The maximum number of search attempts is limited to {self.max_search_limit}. "
             "Once you have all the information you need, continue your reasoning. "
             "Remember: use <|begin_search_query|> to request a web search and end with <|end_search_query|>. "
-            "When done searching, continue your reasoning.\n"
-            f"Question: {question}"
+            "When done searching, continue your reasoning."
         )
+        user_prompt = self._format_external_context("Question", question)
+        return self._to_prompt(system_prompt, user_prompt)
 
     def _build_refine_agent_prompt(self,
                                    prev_reasoning: str,
                                    search_query: str,
-                                   docs: List[RetrieverDocument]) -> str:
+                                   docs: List[RetrieverDocument]) -> Any:
         docs_block = "\n\n".join([
             f"DocID: {doc.get('id', '')}\nContent: {doc.get('contents', '')}"
             for doc in docs[:self.docs_per_query]
@@ -155,7 +145,7 @@ class SearchO1:
         if not docs_block:
             docs_block = "No retrieved documents."
 
-        return (
+        system_prompt = (
             "Task Instruction: You are tasked with reading and analyzing web pages based on the following inputs: "
             "Previous Reasoning Steps, Current Search Query, and Searched Web Pages. "
             "Your objective is to extract relevant and helpful information for Current Search Query from the Searched Web Pages "
@@ -172,13 +162,18 @@ class SearchO1:
             "Final Information\n[Helpful information]\n"
             "- If the web pages do not provide any helpful information for current search query: Output the following text.\n"
             "Final Information\nNo helpful information found.\n"
-            "Inputs:\n"
-            f"- Previous Reasoning Steps:\n{prev_reasoning}\n"
-            f"- Current Search Query:\n{search_query}\n"
-            f"- Searched Web Pages:\n{docs_block}\n"
+            "Inputs:"
+        )
+        user_prompt = "\n\n".join([
+            self._format_external_context("Previous Reasoning Steps",
+                                          prev_reasoning),
+            self._format_external_context("Current Search Query",
+                                          search_query),
+            self._format_external_context("Searched Web Pages", docs_block),
             "Now you should analyze each web page and find helpful information based on the current search query "
             f"\"{search_query}\" and previous reasoning steps."
-        )
+        ])
+        return self._to_prompt(system_prompt, user_prompt)
 
     def _parse_answer(self, text: str) -> str:
         return self._extract_last_tag(ANSWER_TAG_PATTERN, text)
@@ -202,6 +197,20 @@ class SearchO1:
             f"{info}\n"
             f"{END_SEARCH_RESULT}\n"
         )
+
+    def _generate_text_batch(self, prompts: List[Any],
+                             config: SimpleNamespace) -> List[str]:
+        if not prompts:
+            return []
+        if not self.use_chat_template:
+            prompt_texts = [self._prompt_to_text(prompt) for prompt in prompts]
+            return self.llm_client.generate_text(prompt_texts,
+                                                 config,
+                                                 self.stop_tokens)
+        return self.llm_client.generate_text(prompts,
+                                             config,
+                                             self.stop_tokens,
+                                             tokenizer=self.tokenizer)
 
     def run(self, question: str, max_iterations: int = 15) -> SearchO1Result:
         return self.run_batch([question], max_iterations=max_iterations)[0]
@@ -245,18 +254,25 @@ class SearchO1:
                 break
 
             active_prompts = [prompts[i] for i in active_indices]
-            main_outputs = self.llm_client.generate_text(
-                active_prompts, search_config, self.stop_tokens)
+            main_outputs = self._generate_text_batch(active_prompts,
+                                                     search_config)
 
             queries_to_search: List[str] = []
             query_meta: List[tuple[int, str]] = []
 
             for local_i, sample_i in enumerate(active_indices):
                 output = main_outputs[local_i]
-                results[sample_i]["prompts"].append(prompts[sample_i])
+                results[sample_i]["prompts"].append(
+                    self._prompt_to_text(prompts[sample_i]))
                 results[sample_i]["raw_outputs"].append(output)
                 results[sample_i]["executed_iterations"] += 1
-                prompts[sample_i] += output + "\n"
+                if self.use_chat_template:
+                    prompts[sample_i] = [
+                        *prompts[sample_i],
+                        {"role": "assistant", "content": output},
+                    ]
+                else:
+                    prompts[sample_i] += output + "\n"
 
                 answer = self._parse_answer(output)
                 if answer:
@@ -273,7 +289,13 @@ class SearchO1:
                     limit_message = self._build_search_result_appendix(
                         "The maximum search limit is exceeded. You are not allowed to search."
                     )
-                    prompts[sample_i] += limit_message
+                    if self.use_chat_template:
+                        prompts[sample_i] = [
+                            *prompts[sample_i],
+                            {"role": "user", "content": limit_message},
+                        ]
+                    else:
+                        prompts[sample_i] += limit_message
                     results[sample_i]["raw_outputs"].append(limit_message)
                     completed[sample_i] = True
                     continue
@@ -282,7 +304,13 @@ class SearchO1:
                     repeat_message = self._build_search_result_appendix(
                         "You have searched this query. Please refer to previous results."
                     )
-                    prompts[sample_i] += repeat_message
+                    if self.use_chat_template:
+                        prompts[sample_i] = [
+                            *prompts[sample_i],
+                            {"role": "user", "content": repeat_message},
+                        ]
+                    else:
+                        prompts[sample_i] += repeat_message
                     results[sample_i]["raw_outputs"].append(repeat_message)
                     continue
 
@@ -303,7 +331,7 @@ class SearchO1:
                 sample_i, search_query = query_meta[idx]
                 selected_docs = docs[:self.docs_per_query]
                 selected_doc_ids = [doc.get("id", "") for doc in selected_docs]
-                prev_reasoning = prompts[sample_i]
+                prev_reasoning = self._prompt_to_text(prompts[sample_i])
                 refine_prompt = self._build_refine_agent_prompt(
                     prev_reasoning=prev_reasoning,
                     search_query=search_query,
@@ -313,8 +341,8 @@ class SearchO1:
                 refine_meta.append((sample_i, search_query, selected_doc_ids,
                                     selected_docs))
 
-            refine_outputs = self.llm_client.generate_text(
-                refine_prompts, refine_config, self.stop_tokens)
+            refine_outputs = self._generate_text_batch(refine_prompts,
+                                                       refine_config)
 
             for idx, refine_output in enumerate(refine_outputs):
                 sample_i, search_query, selected_doc_ids, selected_docs = refine_meta[idx]
@@ -327,12 +355,20 @@ class SearchO1:
                     "refined_information": refined_info,
                 })
                 results[sample_i]["retrieved_docs"].append(selected_docs)
-                results[sample_i]["refine_prompts"].append(refine_prompts[idx])
+                results[sample_i]["refine_prompts"].append(
+                    self._prompt_to_text(refine_prompts[idx]))
                 results[sample_i]["refine_outputs"].append(refine_output)
                 results[sample_i]["search_count"] = search_counts[sample_i]
 
-                prompts[sample_i] += self._build_search_result_appendix(
+                search_result_appendix = self._build_search_result_appendix(
                     refined_info)
+                if self.use_chat_template:
+                    prompts[sample_i] = [
+                        *prompts[sample_i],
+                        {"role": "user", "content": search_result_appendix},
+                    ]
+                else:
+                    prompts[sample_i] += search_result_appendix
 
         for idx, result in enumerate(results):
             result["search_count"] = search_counts[idx]
