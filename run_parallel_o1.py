@@ -1,5 +1,6 @@
 import argparse
 import json
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -7,6 +8,31 @@ from tqdm import tqdm
 
 from src.parallel_o1 import ParallelO1
 from src.utils import build_output_dir, read_jsonlines, write_jsonlines
+
+
+def _create_tensorboard_writer(log_dir: Path):
+    try:
+        from torch.utils.tensorboard import SummaryWriter
+        return SummaryWriter(log_dir=str(log_dir))
+    except Exception:
+        try:
+            from tensorboardX import SummaryWriter
+            return SummaryWriter(log_dir=str(log_dir))
+        except Exception:
+            return None
+
+
+def _percentile(values: List[float], p: float) -> float:
+    if not values:
+        return 0.0
+    sorted_values = sorted(values)
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (len(sorted_values) - 1) * p
+    lower = int(rank)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    weight = rank - lower
+    return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,11 +79,15 @@ def build_parser() -> argparse.ArgumentParser:
                         default="</search>,</answer>,</search_directions>")
     parser.add_argument("--max_iterations", type=int, default=5)
     parser.add_argument("--num_samples", type=int, default=None)
+    parser.add_argument("--timing_json_file", type=str,
+                        default="timing_parallel_o1.json",
+                        help="File name under output_dir to persist timing metrics json")
     parser.add_argument("--debug",  action='store_true')
     return parser
 
 
 def main() -> None:
+    run_started_ns = time.perf_counter_ns()
     parser = build_parser()
     args = parser.parse_args()
     input_file_path = Path(args.input_file)
@@ -66,15 +96,21 @@ def main() -> None:
                                   model_name=args.model)
     dataset_name = input_file_path.parent.name
 
+    read_started_ns = time.perf_counter_ns()
     samples = read_jsonlines(input_file_path)
+    read_data_ms = (time.perf_counter_ns() - read_started_ns) / 1_000_000.0
     if args.num_samples is not None:
         samples = samples[:max(0, args.num_samples)]
 
     pipeline = ParallelO1.from_args(args)
 
     output_records: List[Dict[str, Any]] = []
+    batch_timings: List[Dict[str, Any]] = []
     batch_size = max(1, int(args.batch_size))
     batch_starts = range(0, len(samples), batch_size)
+
+    writer = _create_tensorboard_writer(output_dir / "tensorboard")
+
     if args.debug:
         import debugpy
         debugpy.listen(9999)
@@ -83,9 +119,10 @@ def main() -> None:
         print("debugger attached")
         print(f"break point")
         debugpy.breakpoint()
-    for batch_start in tqdm(batch_starts,
-                            desc="Processing batches",
-                            unit="batch"):
+    pipeline_started_ns = time.perf_counter_ns()
+    for batch_idx, batch_start in enumerate(tqdm(batch_starts,
+                                                 desc="Processing batches",
+                                                 unit="batch")):
         batch_samples = samples[batch_start:batch_start + batch_size]
         questions: List[str] = []
         validated_items: List[tuple[int, str, List[str]]] = []
@@ -98,8 +135,27 @@ def main() -> None:
 
         batch_results: List[Dict[str, Any]] = []
 
+        batch_started_ns = time.perf_counter_ns()
         batch_results = [dict(item)
                          for item in pipeline.run_batch(questions, args.max_iterations)]
+        batch_wall_ms = (time.perf_counter_ns() -
+                         batch_started_ns) / 1_000_000.0
+        batch_timing = dict(pipeline.latest_batch_timing)
+        batch_timing.update({
+            "batch_index": batch_idx,
+            "batch_start": batch_start,
+            "batch_size": len(batch_samples),
+            "batch_wall_ms": batch_wall_ms,
+        })
+        batch_timings.append(batch_timing)
+
+        if writer is not None:
+            writer.add_scalar("batch/batch_wall_ms", batch_wall_ms, batch_idx)
+            phase_totals = batch_timing.get("phase_totals_ms", {})
+            for phase_name, phase_ms in phase_totals.items():
+                writer.add_scalar(f"batch/{phase_name}",
+                                  float(phase_ms),
+                                  batch_idx)
 
         for (idx, question, golden_answers), result in zip(validated_items,
                                                            batch_results):
@@ -109,8 +165,12 @@ def main() -> None:
                 "question": question,
                 "golden_answers": golden_answers,
                 "predicted_answer_in_tag": final_answer,
+                "timing": result.get("timing", {}),
                 "pipeline_result": result,
             })
+
+    pipeline_total_ms = (time.perf_counter_ns() -
+                         pipeline_started_ns) / 1_000_000.0
 
     if args.result_file:
         output_file_path = Path(args.result_file)
@@ -119,7 +179,63 @@ def main() -> None:
         config_file_path = output_dir / "config.json"
         with config_file_path.open("w", encoding="utf-8") as f:
             json.dump(vars(args), f, ensure_ascii=False, indent=0)
+
+    write_started_ns = time.perf_counter_ns()
     write_jsonlines(output_file_path, output_records)
+    write_result_ms = (time.perf_counter_ns() - write_started_ns) / 1_000_000.0
+
+    sample_total_ms = [
+        float(record.get("timing", {}).get("total_ms", 0.0))
+        for record in output_records
+    ]
+    batch_wall_ms_values = [float(item.get("batch_wall_ms", 0.0))
+                            for item in batch_timings]
+
+    timing_summary: Dict[str, Any] = {
+        "sample_count": len(samples),
+        "batch_count": len(batch_timings),
+        "read_data_ms": read_data_ms,
+        "pipeline_total_ms": pipeline_total_ms,
+        "write_result_ms": write_result_ms,
+        "total_run_ms": (time.perf_counter_ns() - run_started_ns) / 1_000_000.0,
+        "sample_timing_stats_ms": {
+            "avg": sum(sample_total_ms) / len(sample_total_ms) if sample_total_ms else 0.0,
+            "p50": _percentile(sample_total_ms, 0.5),
+            "p95": _percentile(sample_total_ms, 0.95),
+            "max": max(sample_total_ms) if sample_total_ms else 0.0,
+        },
+        "batch_wall_stats_ms": {
+            "avg": sum(batch_wall_ms_values) / len(batch_wall_ms_values) if batch_wall_ms_values else 0.0,
+            "p50": _percentile(batch_wall_ms_values, 0.5),
+            "p95": _percentile(batch_wall_ms_values, 0.95),
+            "max": max(batch_wall_ms_values) if batch_wall_ms_values else 0.0,
+        },
+        "batch_timings": batch_timings,
+    }
+
+    if writer is not None:
+        writer.add_scalar("run/read_data_ms",
+                          timing_summary["read_data_ms"], 0)
+        writer.add_scalar("run/pipeline_total_ms",
+                          timing_summary["pipeline_total_ms"],
+                          0)
+        writer.add_scalar("run/write_result_ms",
+                          timing_summary["write_result_ms"],
+                          0)
+        writer.add_scalar("run/total_run_ms",
+                          timing_summary["total_run_ms"], 0)
+        writer.add_scalar("sample/total_ms_avg",
+                          timing_summary["sample_timing_stats_ms"]["avg"],
+                          0)
+        writer.add_scalar("sample/total_ms_p95",
+                          timing_summary["sample_timing_stats_ms"]["p95"],
+                          0)
+        writer.flush()
+        writer.close()
+
+    timing_output_path = output_dir / "time.json"
+    with timing_output_path.open("w", encoding="utf-8") as f:
+        json.dump(timing_summary, f, ensure_ascii=False, indent=0)
 
 
 if __name__ == "__main__":

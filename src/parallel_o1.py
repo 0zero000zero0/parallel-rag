@@ -1,7 +1,8 @@
 import hashlib
 import re
+import time
 from types import SimpleNamespace
-from typing import Any, List, TypedDict
+from typing import Any, Dict, List, TypedDict
 
 from src.baseline_base import (PromptedGenerationBase,
                                build_openai_client_from_args,
@@ -70,6 +71,7 @@ class ParallelO1Result(TypedDict):
     refined_paths: List[List[RefinedPathResult]]
     global_refinements: List[str]
     final_answer: str
+    timing: Dict[str, Any]
 
 
 class ParallelO1(PromptedGenerationBase):
@@ -80,9 +82,9 @@ class ParallelO1(PromptedGenerationBase):
                  navigator_agent_max_tokens: int = 512,
                  navigator_agent_temperature: float = 0.6,
                  navigator_agent_top_p: float = 0.9,
-                 path_max_tokens: int = 512,
-                 path_temperature: float = 0.8,
-                 path_top_p: float = 0.95,
+                 path_agent_max_tokens: int = 512,
+                 path_agent_temperature: float = 0.8,
+                 path_agent_top_p: float = 0.95,
                  refine_max_tokens: int = 512,
                  refine_temperature: float = 0.2,
                  refine_top_p: float = 0.9,
@@ -104,15 +106,16 @@ class ParallelO1(PromptedGenerationBase):
         self.navigator_agent_max_tokens = navigator_agent_max_tokens
         self.navigator_agent_temperature = navigator_agent_temperature
         self.navigator_agent_top_p = navigator_agent_top_p
-        self.path_max_tokens = path_max_tokens
-        self.path_temperature = path_temperature
-        self.path_top_p = path_top_p
+        self.path_agent_max_tokens = path_agent_max_tokens
+        self.path_agent_temperature = path_agent_temperature
+        self.path_agent_top_p = path_agent_top_p
         self.refine_max_tokens = refine_max_tokens
         self.refine_temperature = refine_temperature
         self.refine_top_p = refine_top_p
         self.synthesize_max_tokens = synthesize_max_tokens
         self.synthesize_temperature = synthesize_temperature
         self.synthesize_top_p = synthesize_top_p
+        self.latest_batch_timing: Dict[str, Any] = {}
 
     @classmethod
     def from_args(cls, args) -> "ParallelO1":
@@ -130,9 +133,11 @@ class ParallelO1(PromptedGenerationBase):
         navigator_agent_top_p = float(
             getattr(args, "navigator_agent_top_p", 0.9))
 
-        path_max_tokens = int(getattr(args, "path_max_tokens", 384))
-        path_temperature = float(getattr(args, "path_temperature", 0.8))
-        path_top_p = float(getattr(args, "path_top_p", 0.95))
+        path_agent_max_tokens = int(
+            getattr(args, "path_agent_max_tokens", 384))
+        path_agent_temperature = float(
+            getattr(args, "path_agent_temperature", 0.8))
+        path_agent_top_p = float(getattr(args, "path_agent_top_p", 0.95))
 
         refine_max_tokens = int(getattr(args, "refine_max_tokens", 384))
         refine_temperature = float(getattr(args, "refine_temperature", 0.2))
@@ -149,9 +154,9 @@ class ParallelO1(PromptedGenerationBase):
                    navigator_agent_max_tokens=navigator_agent_max_tokens,
                    navigator_agent_temperature=navigator_agent_temperature,
                    navigator_agent_top_p=navigator_agent_top_p,
-                   path_max_tokens=path_max_tokens,
-                   path_temperature=path_temperature,
-                   path_top_p=path_top_p,
+                   path_agent_max_tokens=path_agent_max_tokens,
+                   path_agent_temperature=path_agent_temperature,
+                   path_agent_top_p=path_agent_top_p,
                    refine_max_tokens=refine_max_tokens,
                    refine_temperature=refine_temperature,
                    refine_top_p=refine_top_p,
@@ -389,6 +394,14 @@ class ParallelO1(PromptedGenerationBase):
     def _parse_answer(self, text: str) -> str:
         return self._extract_last_tag(ANSWER_TAG_PATTERN, text)
 
+    @staticmethod
+    def _now_ns() -> int:
+        return time.perf_counter_ns()
+
+    @staticmethod
+    def _ns_to_ms(duration_ns: int) -> float:
+        return duration_ns / 1_000_000.0
+
     def _init_batch_runtime(self,
                             questions: List[str],
                             max_iterations: int) -> tuple[List[bool], List[ParallelO1Result], List[List[str]]]:
@@ -409,6 +422,16 @@ class ParallelO1(PromptedGenerationBase):
             "refined_paths": [],
             "global_refinements": [],
             "final_answer": "",
+            "timing": {
+                "phase1_navigator_ms": 0.0,
+                "phase2_path_ms": 0.0,
+                "phase3_retrieval_ms": 0.0,
+                "phase3_pooling_ms": 0.0,
+                "phase4_refine_ms": 0.0,
+                "phase5_synthesize_ms": 0.0,
+                "total_ms": 0.0,
+                "executed_iterations": 0,
+            },
         } for q in questions]
 
         # Keep historical global refinements R_<i> for each sample.
@@ -427,6 +450,17 @@ class ParallelO1(PromptedGenerationBase):
         if not questions:
             return []
 
+        run_batch_started_ns = self._now_ns()
+        batch_phase_totals: Dict[str, float] = {
+            "phase1_navigator_ms": 0.0,
+            "phase2_path_ms": 0.0,
+            "phase3_retrieval_ms": 0.0,
+            "phase3_pooling_ms": 0.0,
+            "phase4_refine_ms": 0.0,
+            "phase5_synthesize_ms": 0.0,
+        }
+        iteration_timings: List[Dict[str, Any]] = []
+
         completed, results, refinement_histories = self._init_batch_runtime(
             questions=questions,
             max_iterations=max_iterations)
@@ -435,14 +469,28 @@ class ParallelO1(PromptedGenerationBase):
         navigator_agent_config = self._make_config(max_tokens=self.navigator_agent_max_tokens,
                                                    temperature=self.navigator_agent_temperature,
                                                    top_p=self.navigator_agent_top_p)
-        path_config = self._make_config(max_tokens=self.path_max_tokens,
-                                        temperature=self.path_temperature,
-                                        top_p=self.path_top_p)
+        path_config = self._make_config(max_tokens=self.path_agent_max_tokens,
+                                        temperature=self.path_agent_temperature,
+                                        top_p=self.path_agent_top_p)
         refine_config = self._make_config(max_tokens=self.refine_max_tokens,
                                           temperature=self.refine_temperature,
                                           top_p=self.refine_top_p)
 
         for iteration_idx in range(max_iterations):
+            iteration_started_ns = self._now_ns()
+            iteration_timing: Dict[str, Any] = {
+                "iteration": iteration_idx + 1,
+                "active_samples": 0,
+                "path_prompt_count": 0,
+                "retrieval_query_count": 0,
+                "refine_prompt_count": 0,
+                "phase1_navigator_ms": 0.0,
+                "phase2_path_ms": 0.0,
+                "phase3_retrieval_ms": 0.0,
+                "phase3_pooling_ms": 0.0,
+                "phase4_refine_ms": 0.0,
+                "iteration_total_ms": 0.0,
+            }
             # -----------------------------
             # Phase 1: Navigator planning
             # -----------------------------
@@ -450,17 +498,26 @@ class ParallelO1(PromptedGenerationBase):
             if not active_indices:
                 break
 
+            iteration_timing["active_samples"] = len(active_indices)
+
             active_prompts = [
                 self._build_navigator_agent_prompt(
                     question=questions[i],
                     historical_refinements=refinement_histories[i])
                 for i in active_indices
             ]
+            phase1_started_ns = self._now_ns()
             navigator_agent_outputs = self._generate_text_batch(active_prompts,
                                                                 navigator_agent_config)
+            phase1_ms = self._ns_to_ms(self._now_ns() - phase1_started_ns)
+            batch_phase_totals["phase1_navigator_ms"] += phase1_ms
+            iteration_timing["phase1_navigator_ms"] = phase1_ms
+            phase1_share = phase1_ms / len(active_indices)
+            for sample_i in active_indices:
+                results[sample_i]["timing"]["phase1_navigator_ms"] += phase1_share
 
             # Collect path-dispatch inputs from Navigator outputs.
-            path_generation_prompts: List[Any] = []
+            path_agent_generation_prompts: List[Any] = []
             path_meta: List[tuple[int, int, str, str, str, str]] = []
             path_plans_by_sample: List[List[PathPlan]] = [
                 [] for _ in range(len(questions))
@@ -496,34 +553,47 @@ class ParallelO1(PromptedGenerationBase):
                     completed[sample_i] = True
                     continue
 
-                for path_id, direction in enumerate(directions, start=1):
-                    path_prompt = self._build_path_agent_prompt(
+                for path_agent_id, direction in enumerate(directions, start=1):
+                    path_agent_prompt = self._build_path_agent_prompt(
                         original_question=questions[sample_i],
                         navigator_agent_think=navigator_agent_think,
                         direction=direction)
-                    path_generation_prompts.append(path_prompt)
+                    path_agent_generation_prompts.append(path_agent_prompt)
                     path_meta.append(
-                        (sample_i, path_id, direction["direction_id"],
+                        (sample_i, path_agent_id, direction["direction_id"],
                          direction["direction"], navigator_agent_think,
-                         self._prompt_to_text(path_prompt)))
+                         self._prompt_to_text(path_agent_prompt)))
 
-            if not path_generation_prompts:
+            iteration_timing["path_prompt_count"] = len(
+                path_agent_generation_prompts)
+
+            if not path_agent_generation_prompts:
                 continue
 
             # -----------------------------
             # Phase 2: Path-agent concretization
             # -----------------------------
-            path_outputs = self._generate_text_batch(path_generation_prompts,
-                                                     path_config)
+            phase2_started_ns = self._now_ns()
+            path_agent_outputs = self._generate_text_batch(path_agent_generation_prompts,
+                                                           path_config)
+            phase2_ms = self._ns_to_ms(self._now_ns() - phase2_started_ns)
+            batch_phase_totals["phase2_path_ms"] += phase2_ms
+            iteration_timing["phase2_path_ms"] = phase2_ms
+
+            phase2_samples = sorted({meta[0] for meta in path_meta})
+            if phase2_samples:
+                phase2_share = phase2_ms / len(phase2_samples)
+                for sample_i in phase2_samples:
+                    results[sample_i]["timing"]["phase2_path_ms"] += phase2_share
 
             flat_queries: List[str] = []
             query_meta: List[tuple[int, int]] = []
 
-            for idx, path_output in enumerate(path_outputs):
+            for idx, path_agent_output in enumerate(path_agent_outputs):
                 sample_i, path_id, direction_id, direction_text, navigator_agent_think, path_prompt_text = path_meta[
                     idx]
-                path_agent_think = self._extract_think(path_output)
-                path_agent_queries = self._extract_searches(path_output)
+                path_agent_think = self._extract_think(path_agent_output)
+                path_agent_queries = self._extract_searches(path_agent_output)
                 path_agent_query = path_agent_queries[0] if path_agent_queries else ""
                 path_plan: PathPlan = {
                     "prompt": path_prompt_text,
@@ -548,12 +618,29 @@ class ParallelO1(PromptedGenerationBase):
             if not flat_queries:
                 for sample_i in active_indices:
                     completed[sample_i] = True
+                iteration_timing["iteration_total_ms"] = self._ns_to_ms(
+                    self._now_ns() - iteration_started_ns)
+                iteration_timings.append(iteration_timing)
                 continue
+
+            iteration_timing["retrieval_query_count"] = len(flat_queries)
 
             # -----------------------------
             # Phase 3: Retrieval + global pooling
             # -----------------------------
+            phase3_retrieval_started_ns = self._now_ns()
             flat_docs = self.retriever.batch_search(flat_queries)
+            phase3_retrieval_ms = self._ns_to_ms(
+                self._now_ns() - phase3_retrieval_started_ns)
+            batch_phase_totals["phase3_retrieval_ms"] += phase3_retrieval_ms
+            iteration_timing["phase3_retrieval_ms"] = phase3_retrieval_ms
+
+            phase3_samples = sorted({sample_i for sample_i, _ in query_meta})
+            if phase3_samples:
+                phase3_retrieval_share = phase3_retrieval_ms / \
+                    len(phase3_samples)
+                for sample_i in phase3_samples:
+                    results[sample_i]["timing"]["phase3_retrieval_ms"] += phase3_retrieval_share
 
             docs_map: dict[tuple[int, int], List[RetrieverDocument]] = {}
             for idx, docs in enumerate(flat_docs):
@@ -573,6 +660,7 @@ class ParallelO1(PromptedGenerationBase):
             ]
 
             # Build one global-refine prompt for each active sample.
+            phase3_pooling_started_ns = self._now_ns()
             for sample_i in active_indices:
                 sample_path_plans = path_plans_by_sample[sample_i]
                 if not sample_path_plans:
@@ -619,11 +707,33 @@ class ParallelO1(PromptedGenerationBase):
                                     [plan["direction_id"]
                                      for plan in sample_query_plans]))
 
+            phase3_pooling_ms = self._ns_to_ms(self._now_ns() -
+                                               phase3_pooling_started_ns)
+            batch_phase_totals["phase3_pooling_ms"] += phase3_pooling_ms
+            iteration_timing["phase3_pooling_ms"] = phase3_pooling_ms
+            phase3_pooling_samples = [meta[0] for meta in refine_meta]
+            if phase3_pooling_samples:
+                phase3_pooling_share = phase3_pooling_ms / \
+                    len(phase3_pooling_samples)
+                for sample_i in phase3_pooling_samples:
+                    results[sample_i]["timing"]["phase3_pooling_ms"] += phase3_pooling_share
+
+            iteration_timing["refine_prompt_count"] = len(refine_prompts)
+
             # -----------------------------
             # Phase 4: Global refinement and context update
             # -----------------------------
+            phase4_started_ns = self._now_ns()
             refine_agent_outputs = self._generate_text_batch(refine_prompts,
                                                              refine_config)
+            phase4_ms = self._ns_to_ms(self._now_ns() - phase4_started_ns)
+            batch_phase_totals["phase4_refine_ms"] += phase4_ms
+            iteration_timing["phase4_refine_ms"] = phase4_ms
+            phase4_samples = [meta[0] for meta in refine_meta]
+            if phase4_samples:
+                phase4_share = phase4_ms / len(phase4_samples)
+                for sample_i in phase4_samples:
+                    results[sample_i]["timing"]["phase4_refine_ms"] += phase4_share
 
             for idx, refine_agent_output in enumerate(refine_agent_outputs):
                 sample_i, refine_prompt_text, _, _ = refine_meta[idx]
@@ -645,6 +755,10 @@ class ParallelO1(PromptedGenerationBase):
                 if not pooled_docs_by_sample[sample_i] and not completed[sample_i]:
                     completed[sample_i] = True
 
+            iteration_timing["iteration_total_ms"] = self._ns_to_ms(
+                self._now_ns() - iteration_started_ns)
+            iteration_timings.append(iteration_timing)
+
         # -----------------------------
         # Phase 5: Final answer synthesis
         # -----------------------------
@@ -658,11 +772,15 @@ class ParallelO1(PromptedGenerationBase):
             if not result["navigator_agent_pormpts"]:
                 result["navigator_agent_pormpts"].append(
                     self._prompt_to_text(final_prompt))
+            phase5_started_ns = self._now_ns()
             final_outputs = self._generate_text_batch(
                 [final_prompt],
                 self._make_config(max_tokens=self.synthesize_max_tokens,
                                   temperature=self.synthesize_temperature,
                                   top_p=self.synthesize_top_p))
+            phase5_ms = self._ns_to_ms(self._now_ns() - phase5_started_ns)
+            batch_phase_totals["phase5_synthesize_ms"] += phase5_ms
+            results[idx]["timing"]["phase5_synthesize_ms"] += phase5_ms
             final_output = final_outputs[0] if final_outputs else ""
             result["navigator_agent_pormpts"].append(final_output)
             parsed = self._parse_answer(final_output)
@@ -672,5 +790,25 @@ class ParallelO1(PromptedGenerationBase):
                 result["final_answer"] = final_output.strip()
             else:
                 result["final_answer"] = ""
+
+        for result in results:
+            phase_sum = (
+                result["timing"]["phase1_navigator_ms"]
+                + result["timing"]["phase2_path_ms"]
+                + result["timing"]["phase3_retrieval_ms"]
+                + result["timing"]["phase3_pooling_ms"]
+                + result["timing"]["phase4_refine_ms"]
+                + result["timing"]["phase5_synthesize_ms"]
+            )
+            result["timing"]["total_ms"] = phase_sum
+            result["timing"]["executed_iterations"] = result["executed_iterations"]
+
+        self.latest_batch_timing = {
+            "num_questions": len(questions),
+            "max_iterations": max_iterations,
+            "total_ms": self._ns_to_ms(self._now_ns() - run_batch_started_ns),
+            "phase_totals_ms": batch_phase_totals,
+            "iteration_timings": iteration_timings,
+        }
 
         return results
