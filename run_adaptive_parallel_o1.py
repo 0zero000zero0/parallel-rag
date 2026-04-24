@@ -55,9 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
                         default="</search>,</answer>,</search_directions>")
     parser.add_argument("--max_iterations", type=int, default=5)
     parser.add_argument("--num_samples", type=int, default=None)
-    parser.add_argument("--timing_json_file", type=str,
-                        default="timing_parallel_o1.json",
-                        help="File name under output_dir to persist timing metrics json")
+
     parser.add_argument("--debug",  action='store_true')
     parser.add_argument("--output_top_dir", default='outputs', type=str)
     return parser
@@ -69,7 +67,7 @@ def main() -> None:
     args = parser.parse_args()
     input_file_path = Path(args.input_file)
     output_dir = build_output_dir(input_file_path,
-                                  method_name="parallel-o1",
+                                  method_name="adaptive-parallel-o1",
                                   model_name=args.model, top_dir=args.output_top_dir)
     dataset_name = input_file_path.parent.name
 

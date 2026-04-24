@@ -14,22 +14,23 @@ output_dir="time-test"
 
 echo "testing running time on ${dataset} dataset"
 
-python run_parallel_o1.py \
+python run_fixed_parallel_o1.py \
   --input_file "$input_file" \
   --retriever_base_url "$RETRIEVER_BASE_URL" \
   --retriever_top_k 5 \
   --openai_base_url "$OPENAI_BASE_URL" \
   --openai_api_key "$OPENAI_API_KEY" \
   --model "$MODEL" \
+  --num_parallel 3 \
   --docs_per_query 5 \
-  --navigator_agent_max_tokens 1024 \
-  --navigator_agent_temperature 0.8 \
-  --navigator_agent_top_p 0.9 \
-  --path_agent_max_tokens 512 \
-  --path_agent_temperature 0.8 \
-  --path_agent_top_p 0.9 \
+  --trigger_max_tokens 512 \
+  --trigger_temperature 1.0 \
+  --trigger_top_p 0.9 \
+  --path_max_tokens 512 \
+  --path_temperature 1.0 \
+  --path_top_p 0.9 \
   --refine_max_tokens 1024 \
-  --refine_temperature 0.8 \
+  --refine_temperature 1.0 \
   --refine_top_p 0.9 \
   --max_iterations 5 \
   --num_samples "$NUM_SAMPLES" \
