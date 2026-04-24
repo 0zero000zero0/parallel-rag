@@ -1,12 +1,14 @@
 import argparse
 import json
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
 from tqdm import tqdm
 
 from src.search_o1 import SearchO1
-from src.utils import build_output_dir, read_jsonlines, write_jsonlines
+from src.utils import (build_output_dir, create_tensorboard_writer, percentile,
+                       read_jsonlines, write_jsonlines)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -26,9 +28,13 @@ def build_parser() -> argparse.ArgumentParser:
                         default="http://127.0.0.1:8001")
     parser.add_argument("--openai_api_key", type=str, default="TEST")
     parser.add_argument("--model", type=str, default="Qwen3-14B")
+    parser.add_argument("--model_path", type=str, default=None,
+                        help="Local or HF model path used to load tokenizer for chat template")
     parser.add_argument("--llm_timeout", type=float, default=None)
     parser.add_argument("--is_chat", action="store_true",
                         help="Use /v1/chat/completions instead of /v1/completions")
+    parser.add_argument("--use_chat_template", action="store_true",
+                        help="Render chat messages via tokenizer.apply_chat_template before /v1/completions")
 
     parser.add_argument("--max_search_limit", type=int, default=5)
     parser.add_argument("--docs_per_query", type=int, default=5)
@@ -44,36 +50,49 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stop_tokens", type=str, default=None)
     parser.add_argument("--max_iterations", type=int, default=5)
     parser.add_argument("--num_samples", type=int, default=None)
+    parser.add_argument("--result_file", type=str, default=None,
+                        help="Path to results jsonlines file")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--output_top_dir", default="outputs", type=str)
     return parser
 
 
 def main() -> None:
+    run_started_ns = time.perf_counter_ns()
     parser = build_parser()
     args = parser.parse_args()
     input_path = Path(args.input_file)
     output_dir = build_output_dir(input_path,
                                   method_name="search-o1",
-                                  model_name=args.model)
+                                  model_name=args.model,
+                                  top_dir=args.output_top_dir)
+    dataset_name = input_path.parent.name
 
-    output_path = output_dir / "output.jsonl"
-    config_path = output_dir / "config.json"
-
-    with config_path.open("w", encoding="utf-8") as f:
-        json.dump(vars(args), f, ensure_ascii=False, indent=4)
-
+    read_started_ns = time.perf_counter_ns()
     samples = read_jsonlines(input_path)
+    read_data_ms = (time.perf_counter_ns() - read_started_ns) / 1_000_000.0
     if args.num_samples is not None:
         samples = samples[:max(0, args.num_samples)]
 
     pipeline = SearchO1.from_args(args)
 
     output_records: List[Dict[str, Any]] = []
+    batch_timings: List[Dict[str, Any]] = []
     batch_size = max(1, int(args.batch_size))
     batch_starts = range(0, len(samples), batch_size)
-    for batch_start in tqdm(batch_starts,
-                            desc="Processing batches",
-                            unit="batch"):
+    writer = create_tensorboard_writer(output_dir / "tensorboard")
+
+    if args.debug:
+        import debugpy
+        debugpy.listen(9999)
+        print("waiting for debugger attaching")
+        debugpy.wait_for_client()
+        print("debugger attached")
+
+    pipeline_started_ns = time.perf_counter_ns()
+    for batch_idx, batch_start in enumerate(tqdm(batch_starts,
+                                                 desc="Processing batches",
+                                                 unit="batch")):
         batch_samples = samples[batch_start:batch_start + batch_size]
         questions: List[str] = []
         validated_items: List[tuple[int, str, List[str]]] = []
@@ -86,19 +105,17 @@ def main() -> None:
 
         batch_results: List[Dict[str, Any]] = []
         batch_error = ""
-        if args.debug:
-            import debugpy
-            debugpy.listen(9999)
-            print("waiting for debugger attaching")
-            debugpy.wait_for_client()
-            print("debugger attached")
         try:
+            batch_started_ns = time.perf_counter_ns()
             batch_results = [
                 dict(item)
                 for item in pipeline.run_batch(questions, args.max_iterations)
             ]
+            batch_wall_ms = (time.perf_counter_ns() -
+                             batch_started_ns) / 1_000_000.0
         except Exception as exc:
             batch_error = str(exc)
+            batch_wall_ms = 0.0
             batch_results = [
                 {
                     "query": question,
@@ -106,8 +123,27 @@ def main() -> None:
                     "retrieved_docs": [],
                     "refine_outputs": [],
                     "final_answer": "",
+                    "timing": {},
                 } for _, question, _ in validated_items
             ]
+
+        batch_timing = dict(getattr(pipeline, "latest_batch_timing", {}))
+        batch_timing.update({
+            "batch_index": batch_idx,
+            "batch_start": batch_start,
+            "batch_size": len(batch_samples),
+            "batch_wall_ms": batch_wall_ms,
+            "error": batch_error,
+        })
+        batch_timings.append(batch_timing)
+
+        if writer is not None:
+            writer.add_scalar("batch/batch_wall_ms", batch_wall_ms, batch_idx)
+            phase_totals = batch_timing.get("phase_totals_ms", {})
+            for phase_name, phase_ms in phase_totals.items():
+                writer.add_scalar(f"batch/{phase_name}",
+                                  float(phase_ms),
+                                  batch_idx)
 
         for (idx, question, golden_answers), result in zip(validated_items,
                                                            batch_results):
@@ -118,11 +154,74 @@ def main() -> None:
                 "golden_answers": golden_answers,
                 "model_output": final_answer,
                 "predicted_answer_in_tag": final_answer,
+                "timing": result.get("timing", {}),
                 "pipeline_result": result,
                 "error": batch_error,
             })
 
+    pipeline_total_ms = (time.perf_counter_ns() -
+                         pipeline_started_ns) / 1_000_000.0
+
+    if args.result_file:
+        output_path = Path(args.result_file)
+    else:
+        output_path = output_dir / f"{dataset_name}.jsonl"
+        config_path = output_dir / "config.json"
+        with config_path.open("w", encoding="utf-8") as f:
+            json.dump(vars(args), f, ensure_ascii=False, indent=0)
+
+    write_started_ns = time.perf_counter_ns()
     write_jsonlines(output_path, output_records)
+    write_result_ms = (time.perf_counter_ns() - write_started_ns) / 1_000_000.0
+
+    sample_total_ms = [
+        float(record.get("timing", {}).get("total_ms", 0.0))
+        for record in output_records
+    ]
+    batch_wall_ms_values = [float(item.get("batch_wall_ms", 0.0))
+                            for item in batch_timings]
+
+    timing_summary: Dict[str, Any] = {
+        "sample_count": len(samples),
+        "batch_count": len(batch_timings),
+        "read_data_ms": read_data_ms,
+        "pipeline_total_ms": pipeline_total_ms,
+        "write_result_ms": write_result_ms,
+        "total_run_ms": (time.perf_counter_ns() - run_started_ns) / 1_000_000.0,
+        "sample_timing_stats_ms": {
+            "avg": sum(sample_total_ms) / len(sample_total_ms) if sample_total_ms else 0.0,
+            "p50": percentile(sample_total_ms, 0.5),
+            "p95": percentile(sample_total_ms, 0.95),
+            "max": max(sample_total_ms) if sample_total_ms else 0.0,
+        },
+        "batch_wall_stats_ms": {
+            "avg": sum(batch_wall_ms_values) / len(batch_wall_ms_values) if batch_wall_ms_values else 0.0,
+            "p50": percentile(batch_wall_ms_values, 0.5),
+            "p95": percentile(batch_wall_ms_values, 0.95),
+            "max": max(batch_wall_ms_values) if batch_wall_ms_values else 0.0,
+        },
+        "batch_timings": batch_timings,
+    }
+
+    if writer is not None:
+        writer.add_scalar("run/read_data_ms",
+                          timing_summary["read_data_ms"], 0)
+        writer.add_scalar("run/pipeline_total_ms",
+                          timing_summary["pipeline_total_ms"], 0)
+        writer.add_scalar("run/write_result_ms",
+                          timing_summary["write_result_ms"], 0)
+        writer.add_scalar("run/total_run_ms",
+                          timing_summary["total_run_ms"], 0)
+        writer.add_scalar("sample/total_ms_avg",
+                          timing_summary["sample_timing_stats_ms"]["avg"], 0)
+        writer.add_scalar("sample/total_ms_p95",
+                          timing_summary["sample_timing_stats_ms"]["p95"], 0)
+        writer.flush()
+        writer.close()
+
+    timing_output_path = output_dir / "time.json"
+    with timing_output_path.open("w", encoding="utf-8") as f:
+        json.dump(timing_summary, f, ensure_ascii=False, indent=0)
 
 
 if __name__ == "__main__":

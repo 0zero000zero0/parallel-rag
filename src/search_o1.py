@@ -1,6 +1,7 @@
 import re
+import time
 from types import SimpleNamespace
-from typing import Any, List, TypedDict
+from typing import Any, Dict, List, TypedDict
 
 from src.baseline_base import (PromptedGenerationBase,
                                build_openai_client_from_args,
@@ -39,6 +40,7 @@ class SearchO1Result(TypedDict):
     refine_prompts: List[str]
     refine_outputs: List[str]
     final_answer: str
+    timing: Dict[str, Any]
 
 
 class SearchO1(PromptedGenerationBase):
@@ -72,6 +74,7 @@ class SearchO1(PromptedGenerationBase):
         self.refine_max_tokens = refine_max_tokens
         self.refine_temperature = refine_temperature
         self.refine_top_p = refine_top_p
+        self.latest_batch_timing: Dict[str, Any] = {}
 
     @classmethod
     def from_args(cls, args) -> "SearchO1":
@@ -212,6 +215,14 @@ class SearchO1(PromptedGenerationBase):
                                              self.stop_tokens,
                                              tokenizer=self.tokenizer)
 
+    @staticmethod
+    def _now_ns() -> int:
+        return time.perf_counter_ns()
+
+    @staticmethod
+    def _ns_to_ms(duration_ns: int) -> float:
+        return duration_ns / 1_000_000.0
+
     def run(self, question: str, max_iterations: int = 15) -> SearchO1Result:
         return self.run_batch([question], max_iterations=max_iterations)[0]
 
@@ -220,6 +231,15 @@ class SearchO1(PromptedGenerationBase):
                   max_iterations: int = 15) -> List[SearchO1Result]:
         if not questions:
             return []
+
+        run_batch_started_ns = self._now_ns()
+        batch_phase_totals: Dict[str, float] = {
+            "phase1_search_ms": 0.0,
+            "phase2_retrieval_ms": 0.0,
+            "phase3_refine_ms": 0.0,
+            "phase4_finalize_ms": 0.0,
+        }
+        iteration_timings: List[Dict[str, Any]] = []
 
         prompts = [self._build_main_agent_prompt(q) for q in questions]
         completed = [False] * len(questions)
@@ -239,6 +259,14 @@ class SearchO1(PromptedGenerationBase):
             "refine_prompts": [],
             "refine_outputs": [],
             "final_answer": "",
+            "timing": {
+                "phase1_search_ms": 0.0,
+                "phase2_retrieval_ms": 0.0,
+                "phase3_refine_ms": 0.0,
+                "phase4_finalize_ms": 0.0,
+                "total_ms": 0.0,
+                "executed_iterations": 0,
+            },
         } for q in questions]
 
         search_config = self._make_config(max_tokens=self.search_max_tokens,
@@ -249,13 +277,33 @@ class SearchO1(PromptedGenerationBase):
                                           top_p=self.refine_top_p)
 
         for iteration in range(1, max_iterations + 1):
+            iteration_started_ns = self._now_ns()
+            iteration_timing: Dict[str, Any] = {
+                "iteration": iteration,
+                "active_samples": 0,
+                "retrieval_query_count": 0,
+                "refine_prompt_count": 0,
+                "phase1_search_ms": 0.0,
+                "phase2_retrieval_ms": 0.0,
+                "phase3_refine_ms": 0.0,
+                "iteration_total_ms": 0.0,
+            }
             active_indices = [i for i, c in enumerate(completed) if not c]
             if not active_indices:
                 break
 
+            iteration_timing["active_samples"] = len(active_indices)
+
             active_prompts = [prompts[i] for i in active_indices]
+            phase1_started_ns = self._now_ns()
             main_outputs = self._generate_text_batch(active_prompts,
                                                      search_config)
+            phase1_ms = self._ns_to_ms(self._now_ns() - phase1_started_ns)
+            batch_phase_totals["phase1_search_ms"] += phase1_ms
+            iteration_timing["phase1_search_ms"] = phase1_ms
+            phase1_share = phase1_ms / len(active_indices)
+            for sample_i in active_indices:
+                results[sample_i]["timing"]["phase1_search_ms"] += phase1_share
 
             queries_to_search: List[str] = []
             query_meta: List[tuple[int, str]] = []
@@ -319,10 +367,24 @@ class SearchO1(PromptedGenerationBase):
                 queries_to_search.append(search_query)
                 query_meta.append((sample_i, search_query))
 
+            iteration_timing["retrieval_query_count"] = len(queries_to_search)
+
             if not queries_to_search:
+                iteration_timing["iteration_total_ms"] = self._ns_to_ms(
+                    self._now_ns() - iteration_started_ns)
+                iteration_timings.append(iteration_timing)
                 continue
 
+            phase2_started_ns = self._now_ns()
             batch_docs = self.retriever.batch_search(queries_to_search)
+            phase2_ms = self._ns_to_ms(self._now_ns() - phase2_started_ns)
+            batch_phase_totals["phase2_retrieval_ms"] += phase2_ms
+            iteration_timing["phase2_retrieval_ms"] = phase2_ms
+            phase2_samples = sorted({sample_i for sample_i, _ in query_meta})
+            if phase2_samples:
+                phase2_share = phase2_ms / len(phase2_samples)
+                for sample_i in phase2_samples:
+                    results[sample_i]["timing"]["phase2_retrieval_ms"] += phase2_share
 
             refine_prompts: List[str] = []
             refine_meta: List[tuple[int, str, List[str],
@@ -341,8 +403,19 @@ class SearchO1(PromptedGenerationBase):
                 refine_meta.append((sample_i, search_query, selected_doc_ids,
                                     selected_docs))
 
+            iteration_timing["refine_prompt_count"] = len(refine_prompts)
+
+            phase3_started_ns = self._now_ns()
             refine_outputs = self._generate_text_batch(refine_prompts,
                                                        refine_config)
+            phase3_ms = self._ns_to_ms(self._now_ns() - phase3_started_ns)
+            batch_phase_totals["phase3_refine_ms"] += phase3_ms
+            iteration_timing["phase3_refine_ms"] = phase3_ms
+            phase3_samples = [meta[0] for meta in refine_meta]
+            if phase3_samples:
+                phase3_share = phase3_ms / len(phase3_samples)
+                for sample_i in phase3_samples:
+                    results[sample_i]["timing"]["phase3_refine_ms"] += phase3_share
 
             for idx, refine_output in enumerate(refine_outputs):
                 sample_i, search_query, selected_doc_ids, selected_docs = refine_meta[idx]
@@ -370,6 +443,11 @@ class SearchO1(PromptedGenerationBase):
                 else:
                     prompts[sample_i] += search_result_appendix
 
+            iteration_timing["iteration_total_ms"] = self._ns_to_ms(
+                self._now_ns() - iteration_started_ns)
+            iteration_timings.append(iteration_timing)
+
+        phase4_started_ns = self._now_ns()
         for idx, result in enumerate(results):
             result["search_count"] = search_counts[idx]
             if result["final_answer"]:
@@ -381,5 +459,27 @@ class SearchO1(PromptedGenerationBase):
                 result["final_answer"] = parsed if parsed else tail.strip()
             else:
                 result["final_answer"] = ""
+
+        phase4_ms = self._ns_to_ms(self._now_ns() - phase4_started_ns)
+        batch_phase_totals["phase4_finalize_ms"] += phase4_ms
+        if results:
+            phase4_share = phase4_ms / len(results)
+            for result in results:
+                result["timing"]["phase4_finalize_ms"] += phase4_share
+                result["timing"]["total_ms"] = (
+                    result["timing"]["phase1_search_ms"]
+                    + result["timing"]["phase2_retrieval_ms"]
+                    + result["timing"]["phase3_refine_ms"]
+                    + result["timing"]["phase4_finalize_ms"]
+                )
+                result["timing"]["executed_iterations"] = result["executed_iterations"]
+
+        self.latest_batch_timing = {
+            "num_questions": len(questions),
+            "max_iterations": max_iterations,
+            "total_ms": self._ns_to_ms(self._now_ns() - run_batch_started_ns),
+            "phase_totals_ms": batch_phase_totals,
+            "iteration_timings": iteration_timings,
+        }
 
         return results

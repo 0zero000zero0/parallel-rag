@@ -16,6 +16,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Parallel o1 runner")
     parser.add_argument("--input_file", type=str, required=True,
                         help="Path to input jsonlines test file")
+    parser.add_argument("--result_file", type=str,default=None,
+                        help="Path to result_file jsonlines file")
     parser.add_argument("--batch_size", type=int, default=512,
                         help="Batch size for batched testing")
 
