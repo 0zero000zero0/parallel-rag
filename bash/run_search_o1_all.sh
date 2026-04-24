@@ -13,14 +13,15 @@ OPENAI_API_KEY="TEST"
 MODEL="Qwen3-32B"
 NUM_SAMPLES=1024
 DATASETS=(
-  bamboogle
-  2wikimultihopqa
-  hotpotqa
-  musique
-  nq
-  popqa
-  triviaqa
-  ambigqa
+  # bamboogle
+  # 2wikimultihopqa
+  # hotpotqa
+  # musique
+  # nq
+  # popqa
+  # triviaqa
+  # ambigqa
+  gpqa
 )
 
 for dataset in "${DATASETS[@]}"; do
@@ -59,10 +60,10 @@ for dataset in "${DATASETS[@]}"; do
     --max_search_limit 5 \
     --docs_per_query 5 \
     --search_max_tokens 512 \
-    --search_temperature 1.0 \
+    --search_temperature 0.8 \
     --search_top_p 0.9 \
     --refine_max_tokens 1024 \
-    --refine_temperature 1.0 \
+    --refine_temperature 0.8 \
     --refine_top_p 0.9 \
     --max_iterations 5 \
     --num_samples "$NUM_SAMPLES"
