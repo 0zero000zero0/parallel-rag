@@ -83,6 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
                         default="timing_parallel_o1.json",
                         help="File name under output_dir to persist timing metrics json")
     parser.add_argument("--debug",  action='store_true')
+    parser.add_argument("--output_top_dir", default='outputs', type=str)
     return parser
 
 
@@ -93,7 +94,7 @@ def main() -> None:
     input_file_path = Path(args.input_file)
     output_dir = build_output_dir(input_file_path,
                                   method_name="parallel-o1",
-                                  model_name=args.model)
+                                  model_name=args.model, top_dir=args.output_top_dir)
     dataset_name = input_file_path.parent.name
 
     read_started_ns = time.perf_counter_ns()

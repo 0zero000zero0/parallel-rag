@@ -26,9 +26,9 @@ def write_jsonlines(path: Path, records: List[Dict[str, Any]]) -> None:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def build_output_dir(input_path: Path, method_name: str, model_name: str) -> Path:
+def build_output_dir(input_path: Path, method_name: str, model_name: str, top_dir: str = "outputs") -> Path:
     dataset_name = input_path.parent.name
-    dataset_root = Path("outputs") / method_name / model_name / dataset_name
+    dataset_root = Path(top_dir) / method_name / model_name / dataset_name
     dataset_root.mkdir(parents=True, exist_ok=True)
 
     existing_indices: List[int] = []
