@@ -11,10 +11,9 @@ NUM_SAMPLES=10
 dataset=bamboogle
 input_file="${DATA_ROOT}/${dataset}/test.jsonl"
 
-result_file="output.jsonl"
-python run_parallel_o1.py \
+result_file="./output.jsonl"
+python run_adaptive_parallel_o1.py \
   --input_file "$input_file" \
-  --result_file "${result_file}" \
   --retriever_base_url "$RETRIEVER_BASE_URL" \
   --retriever_top_k 5 \
   --openai_base_url "$OPENAI_BASE_URL" \
@@ -34,8 +33,8 @@ python run_parallel_o1.py \
   --num_samples "$NUM_SAMPLES" \
   --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
   --batch_size 10 \
-  --use_chat_template \
-  --debug
+  --use_chat_template
+  # --debug
 
 
 python evaluate.py \

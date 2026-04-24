@@ -6,33 +6,9 @@ from typing import Any, Dict, List
 
 from tqdm import tqdm
 
-from src.parallel_o1 import ParallelO1
-from src.utils import build_output_dir, read_jsonlines, write_jsonlines
-
-
-def _create_tensorboard_writer(log_dir: Path):
-    try:
-        from torch.utils.tensorboard import SummaryWriter
-        return SummaryWriter(log_dir=str(log_dir))
-    except Exception:
-        try:
-            from tensorboardX import SummaryWriter
-            return SummaryWriter(log_dir=str(log_dir))
-        except Exception:
-            return None
-
-
-def _percentile(values: List[float], p: float) -> float:
-    if not values:
-        return 0.0
-    sorted_values = sorted(values)
-    if len(sorted_values) == 1:
-        return sorted_values[0]
-    rank = (len(sorted_values) - 1) * p
-    lower = int(rank)
-    upper = min(lower + 1, len(sorted_values) - 1)
-    weight = rank - lower
-    return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
+from src.adaptive_parallel_o1 import AdaptiveParallelO1
+from src.utils import (build_output_dir, create_tensorboard_writer, percentile,
+                       read_jsonlines, write_jsonlines)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -103,14 +79,14 @@ def main() -> None:
     if args.num_samples is not None:
         samples = samples[:max(0, args.num_samples)]
 
-    pipeline = ParallelO1.from_args(args)
+    pipeline = AdaptiveParallelO1.from_args(args)
 
     output_records: List[Dict[str, Any]] = []
     batch_timings: List[Dict[str, Any]] = []
     batch_size = max(1, int(args.batch_size))
     batch_starts = range(0, len(samples), batch_size)
 
-    writer = _create_tensorboard_writer(output_dir / "tensorboard")
+    writer = create_tensorboard_writer(output_dir / "tensorboard")
 
     if args.debug:
         import debugpy
@@ -201,14 +177,14 @@ def main() -> None:
         "total_run_ms": (time.perf_counter_ns() - run_started_ns) / 1_000_000.0,
         "sample_timing_stats_ms": {
             "avg": sum(sample_total_ms) / len(sample_total_ms) if sample_total_ms else 0.0,
-            "p50": _percentile(sample_total_ms, 0.5),
-            "p95": _percentile(sample_total_ms, 0.95),
+            "p50": percentile(sample_total_ms, 0.5),
+            "p95": percentile(sample_total_ms, 0.95),
             "max": max(sample_total_ms) if sample_total_ms else 0.0,
         },
         "batch_wall_stats_ms": {
             "avg": sum(batch_wall_ms_values) / len(batch_wall_ms_values) if batch_wall_ms_values else 0.0,
-            "p50": _percentile(batch_wall_ms_values, 0.5),
-            "p95": _percentile(batch_wall_ms_values, 0.95),
+            "p50": percentile(batch_wall_ms_values, 0.5),
+            "p95": percentile(batch_wall_ms_values, 0.95),
             "max": max(batch_wall_ms_values) if batch_wall_ms_values else 0.0,
         },
         "batch_timings": batch_timings,

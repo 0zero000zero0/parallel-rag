@@ -40,3 +40,28 @@ def build_output_dir(input_path: Path, method_name: str, model_name: str, top_di
     output_dir = dataset_root / str(next_index)
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
+
+
+def create_tensorboard_writer(log_dir: Path):
+    try:
+        from torch.utils.tensorboard import SummaryWriter
+        return SummaryWriter(log_dir=str(log_dir))
+    except Exception:
+        try:
+            from tensorboardX import SummaryWriter
+            return SummaryWriter(log_dir=str(log_dir))
+        except Exception:
+            return None
+
+
+def percentile(values: List[float], p: float) -> float:
+    if not values:
+        return 0.0
+    sorted_values = sorted(values)
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (len(sorted_values) - 1) * p
+    lower = int(rank)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    weight = rank - lower
+    return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight

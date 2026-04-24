@@ -46,7 +46,7 @@ for dataset in "${DATASETS[@]}"; do
   echo "[All] Dataset: ${dataset}"
   echo "[All] Expected output dir: ${result_dir}"
 
-  python run_parallel_o1.py \
+  python run_adaptive_parallel_o1.py \
     --input_file "$input_file" \
     --batch_size 512 \
     --retriever_base_url "$RETRIEVER_BASE_URL" \

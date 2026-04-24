@@ -74,7 +74,7 @@ class ParallelO1Result(TypedDict):
     timing: Dict[str, Any]
 
 
-class ParallelO1(PromptedGenerationBase):
+class AdaptiveParallelO1(PromptedGenerationBase):
     def __init__(self,
                  retriever: RetrieverClient,
                  llm_client: OpenAIClient,
@@ -118,7 +118,7 @@ class ParallelO1(PromptedGenerationBase):
         self.latest_batch_timing: Dict[str, Any] = {}
 
     @classmethod
-    def from_args(cls, args) -> "ParallelO1":
+    def from_args(cls, args) -> "AdaptiveParallelO1":
         use_chat_template, tokenizer = resolve_chat_template_components(args)
         retriever_client = build_retriever_client_from_args(args)
         llm_client = build_openai_client_from_args(
