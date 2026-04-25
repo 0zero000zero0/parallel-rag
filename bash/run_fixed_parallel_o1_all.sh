@@ -35,12 +35,14 @@ for dataset in "${DATASETS[@]}"; do
     next_index=$((max_index + 1))
   fi
 
+  echo "=================================================="
+  echo "Result Index for ${dataset}: ${next_index}"
+
   result_dir="${dataset_output_root}/${next_index}"
   result_file="${result_dir}/${dataset}.jsonl"
 
-  echo "[All]=================================================="
-  echo "[All] Dataset: ${dataset}"
-  echo "[All] Expected output dir: ${result_dir}"
+  echo "Processing Dataset: ${dataset}"
+  echo "Output Dir: ${result_dir}"
 
   python run_fixed_parallel_o1.py \
     --input_file "$input_file" \
@@ -65,19 +67,14 @@ for dataset in "${DATASETS[@]}"; do
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
     --num_samples "$NUM_SAMPLES"
 
-  if [[ ! -f "$result_file" ]]; then
-    echo "[All] ERROR: result file not found after run_parallel_o1.py: $result_file" >&2
-    exit 1
-  fi
-
   python evaluate.py \
     --result_file "$result_file" \
     --dataset_name "$dataset" \
     --dataset_path "$input_file"
 
-  echo "[All] Finished ${dataset}"
-  echo "[All] Result: ${result_file}"
-  echo "[All] Metrics: ${result_dir}/metrics.json"
+  echo "Finished Dataset: ${dataset}"
+  echo "Result File: ${result_file}"
+  echo "Metrics File: ${result_dir}/metrics.json"
 done
 
-echo "[All] All datasets done."
+echo "All datasets done."
