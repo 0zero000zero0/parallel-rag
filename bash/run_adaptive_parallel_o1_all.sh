@@ -26,7 +26,7 @@ for dataset in "${DATASETS[@]}"; do
   input_file="${DATA_ROOT}/${dataset}/test.jsonl"
 
   if [[ ! -f "$input_file" ]]; then
-    echo "[All] Skip ${dataset}: input file not found -> $input_file"
+    echo " Skip ${dataset}: input file not found -> $input_file"
     continue
   fi
 
@@ -40,12 +40,14 @@ for dataset in "${DATASETS[@]}"; do
     next_index=$((max_index + 1))
   fi
 
+  echo "Result Index for ${dataset}: ${next_index}"
+
   result_dir="${dataset_output_root}/${next_index}"
   result_file="${result_dir}/${dataset}.jsonl"
 
-  echo "[All]=================================================="
-  echo "[All] Dataset: ${dataset}"
-  echo "[All] Expected output dir: ${result_dir}"
+  echo "=================================================="
+  echo "Processing Dataset: ${dataset}"
+  echo "Output Dir: ${result_dir}"
 
   python run_adaptive_parallel_o1.py \
     --input_file "$input_file" \
@@ -57,32 +59,27 @@ for dataset in "${DATASETS[@]}"; do
     --model "$MODEL" \
     --docs_per_query 5 \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.7 \
-    --navigator_agent_top_p 0.7 \
-    --path_agent_max_tokens 512 \
-    --path_agent_temperature 0.7 \
-    --path_agent_top_p 0.7 \
+    --navigator_agent_temperature 0.9 \
+    --navigator_agent_top_p 0.9 \
+    --path_agent_max_tokens 1024 \
+    --path_agent_temperature 0.9 \
+    --path_agent_top_p 0.9 \
     --refine_max_tokens 1024 \
-    --refine_temperature 0.7 \
-    --refine_top_p 0.7 \
+    --refine_temperature 0.9 \
+    --refine_top_p 0.9 \
     --max_iterations 5 \
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
     --num_samples "$NUM_SAMPLES" \
     --use_chat_template
-
-  if [[ ! -f "$result_file" ]]; then
-    echo "[All] ERROR: result file not found after run_parallel_o1.py: $result_file" >&2
-    exit 1
-  fi
 
   python evaluate.py \
     --result_file "$result_file" \
     --dataset_name "$dataset" \
     --dataset_path "$input_file"
 
-  echo "[All] Finished ${dataset}"
-  echo "[All] Result: ${result_file}"
-  echo "[All] Metrics: ${result_dir}/metrics.json"
+  echo "Finished Dataset: ${dataset}"
+  echo "Result File: ${result_file}"
+  echo "Metrics File: ${result_dir}/metrics.json"
 done
 
-echo "[All] All datasets done."
+echo "All datasets done."

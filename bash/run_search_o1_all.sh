@@ -29,7 +29,7 @@ for dataset in "${DATASETS[@]}"; do
   input_file="${DATA_ROOT}/${dataset}/test.jsonl"
 
   if [[ ! -f "$input_file" ]]; then
-    echo "[All] Skip ${dataset}: input file not found -> $input_file"
+    echo " Skip ${dataset}: input file not found -> $input_file"
     continue
   fi
 
@@ -43,12 +43,14 @@ for dataset in "${DATASETS[@]}"; do
     next_index=$((max_index + 1))
   fi
 
+  echo "Result Index for ${dataset}: ${next_index}"
+
   result_dir="${dataset_output_root}/${next_index}"
   result_file="${result_dir}/output.jsonl"
 
-  echo "[All]=================================================="
-  echo "[All] Dataset: ${dataset}"
-  echo "[All] Expected output dir: ${result_dir}"
+  echo "=================================================="
+  echo "Processing Dataset: ${dataset}"
+  echo "Output Dir: ${result_dir}"
 
   python run_search_o1.py \
     --input_file "$input_file" \
@@ -70,7 +72,7 @@ for dataset in "${DATASETS[@]}"; do
     --num_samples "$NUM_SAMPLES"
 
   if [[ ! -f "$result_file" ]]; then
-    echo "[All] ERROR: result file not found after run_search_o1.py: $result_file" >&2
+    echo "ERROR: result file not found after run_search_o1.py: $result_file" >&2
     exit 1
   fi
 
@@ -79,9 +81,9 @@ for dataset in "${DATASETS[@]}"; do
     --dataset_name "$dataset" \
     --dataset_path "$input_file"
 
-  echo "[All] Finished ${dataset}"
-  echo "[All] Result: ${result_file}"
-  echo "[All] Metrics: ${result_dir}/metrics.json"
+  echo "Finished Dataset: ${dataset}"
+  echo "Result File: ${result_file}"
+  echo "Metrics File: ${result_dir}/metrics.json"
 done
 
-echo "[All] All datasets done."
+echo "All datasets done."
