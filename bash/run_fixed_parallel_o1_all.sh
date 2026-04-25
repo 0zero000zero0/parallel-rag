@@ -67,6 +67,14 @@ for dataset in "${DATASETS[@]}"; do
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
     --num_samples "$NUM_SAMPLES"
 
+<<<<<<< HEAD
+=======
+  if [[ ! -f "$result_file" ]]; then
+    echo "ERROR: result file not found after run_parallel_o1.py: $result_file" >&2
+    exit 1
+  fi
+
+>>>>>>> gitcode/main
   python evaluate.py \
     --result_file "$result_file" \
     --dataset_name "$dataset" \

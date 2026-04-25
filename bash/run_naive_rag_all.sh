@@ -45,9 +45,15 @@ for dataset in "${DATASETS[@]}"; do
   result_dir="${dataset_output_root}/${next_index}"
   result_file="${result_dir}/${dataset}.jsonl"
 
+<<<<<<< HEAD
   echo "Processing Dataset: ${dataset}"
   echo "Output Dir: ${result_dir}"
 
+=======
+  echo "=================================================="
+  echo "Processing Dataset: ${dataset}"
+  echo "Output Dir: ${result_dir}"
+>>>>>>> gitcode/main
 
   python run_naive_rag.py \
     --input_file "$input_file" \
