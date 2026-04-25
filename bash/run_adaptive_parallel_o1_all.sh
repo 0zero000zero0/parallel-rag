@@ -40,19 +40,12 @@ for dataset in "${DATASETS[@]}"; do
     next_index=$((max_index + 1))
   fi
 
-<<<<<<< HEAD
   echo "=================================================="
-=======
->>>>>>> gitcode/main
   echo "Result Index for ${dataset}: ${next_index}"
 
   result_dir="${dataset_output_root}/${next_index}"
   result_file="${result_dir}/${dataset}.jsonl"
 
-<<<<<<< HEAD
-=======
-  echo "=================================================="
->>>>>>> gitcode/main
   echo "Processing Dataset: ${dataset}"
   echo "Output Dir: ${result_dir}"
 
@@ -66,13 +59,13 @@ for dataset in "${DATASETS[@]}"; do
     --model "$MODEL" \
     --docs_per_query 5 \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.7 \
-    --navigator_agent_top_p 0.7 \
+    --navigator_agent_temperature 0.8 \
+    --navigator_agent_top_p 0.8 \
     --path_agent_max_tokens 1024 \
-    --path_agent_temperature 0.7 \
-    --path_agent_top_p 0.7 \
+    --path_agent_temperature 0.8 \
+    --path_agent_top_p 0.8 \
     --refine_max_tokens 1024 \
-    --refine_temperature 0.9 \
+    --refine_temperature 0.8 \
     --refine_top_p 0.9 \
     --max_iterations 5 \
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
