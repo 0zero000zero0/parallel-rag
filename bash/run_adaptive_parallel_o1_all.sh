@@ -18,7 +18,8 @@ DATASETS=(
   # popqa
   # triviaqa
   # ambigqa
-  gpqa
+  # gpqa
+  gaia
 )
 
 for dataset in "${DATASETS[@]}"; do
@@ -29,7 +30,7 @@ for dataset in "${DATASETS[@]}"; do
     continue
   fi
 
-  dataset_output_root="./outputs/parallel-o1/${MODEL}/${dataset}"
+  dataset_output_root="./outputs/adaptive-parallel-o1/${MODEL}/${dataset}"
   mkdir -p "$dataset_output_root"
 
   max_index="$(find "$dataset_output_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | grep -E '^[0-9]+$' | sort -n | tail -1 || true)"
@@ -56,14 +57,14 @@ for dataset in "${DATASETS[@]}"; do
     --model "$MODEL" \
     --docs_per_query 5 \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.8 \
-    --navigator_agent_top_p 0.8 \
+    --navigator_agent_temperature 0.7 \
+    --navigator_agent_top_p 0.7 \
     --path_agent_max_tokens 512 \
-    --path_agent_temperature 0.8 \
-    --path_agent_top_p 0.8 \
+    --path_agent_temperature 0.7 \
+    --path_agent_top_p 0.7 \
     --refine_max_tokens 1024 \
-    --refine_temperature 0.8 \
-    --refine_top_p 0.8 \
+    --refine_temperature 0.7 \
+    --refine_top_p 0.7 \
     --max_iterations 5 \
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
     --num_samples "$NUM_SAMPLES" \

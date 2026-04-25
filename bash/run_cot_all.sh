@@ -16,7 +16,8 @@ DATASETS=(
   # popqa
   # triviaqa
   # ambigqa
-  gpqa
+  # gpqa
+  gaia
 )
 
 for dataset in "${DATASETS[@]}"; do
@@ -50,7 +51,7 @@ for dataset in "${DATASETS[@]}"; do
     --openai_base_url "$OPENAI_BASE_URL" \
     --openai_api_key "$OPENAI_API_KEY" \
     --model "$MODEL" \
-    --generation_max_tokens 2048 \
+    --generation_max_tokens 1024 \
     --generation_temperature 0.8 \
     --generation_top_p 0.9 \
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \

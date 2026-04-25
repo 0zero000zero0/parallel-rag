@@ -18,7 +18,8 @@ DATASETS=(
   # popqa
   # triviaqa
   # ambigqa
-  gpqa
+  # gpqa
+  gaia
 )
 
 for dataset in "${DATASETS[@]}"; do
