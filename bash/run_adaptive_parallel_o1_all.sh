@@ -59,13 +59,13 @@ for dataset in "${DATASETS[@]}"; do
     --model "$MODEL" \
     --docs_per_query 5 \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.8 \
+    --navigator_agent_temperature 0.9 \
     --navigator_agent_top_p 0.8 \
     --path_agent_max_tokens 1024 \
-    --path_agent_temperature 0.8 \
+    --path_agent_temperature 0.9 \
     --path_agent_top_p 0.8 \
     --refine_max_tokens 1024 \
-    --refine_temperature 0.8 \
+    --refine_temperature 0.9 \
     --refine_top_p 0.9 \
     --max_iterations 5 \
     --model_path /home/zdw2200170271/llm/models/Qwen3-32B \

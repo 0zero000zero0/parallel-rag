@@ -4,13 +4,13 @@ import time
 from types import SimpleNamespace
 from typing import Any, Dict, List, TypedDict
 
-from src.baseline_base import (PromptedGenerationBase,
-                               build_openai_client_from_args,
-                               build_retriever_client_from_args,
-                               parse_stop_tokens,
-                               resolve_chat_template_components)
 from src.clients import (BatchSearchDocs, OpenAIClient, RetrieverClient,
                          RetrieverDocument)
+from src.prompted_generation_base import (PromptedGenerationBase,
+                                          build_openai_client_from_args,
+                                          build_retriever_client_from_args,
+                                          parse_stop_tokens,
+                                          resolve_chat_template_components)
 
 THINK_TAG_PATTERN = re.compile(r"<think>(.*?)</think>",
                                flags=re.DOTALL | re.IGNORECASE)

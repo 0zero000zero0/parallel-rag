@@ -1,9 +1,9 @@
 from typing import Any, List, TypedDict
 
-from src.baseline_base import (PromptedGenerationBase,
-                               build_openai_client_from_args,
-                               parse_stop_tokens,
-                               resolve_chat_template_components)
+from src.prompted_generation_base import (PromptedGenerationBase,
+                                          build_openai_client_from_args,
+                                          parse_stop_tokens,
+                                          resolve_chat_template_components)
 
 COT_SYSTEM_PROMPT = (
     "You are a helpful assistant that can solve the given question step by step. "
