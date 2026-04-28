@@ -45,7 +45,7 @@ class NaiveGeneration(PromptedGenerationBase):
             self._format_external_context("Question", question),
             "Answer the question directly.",
         ])
-        return self._to_prompt(NAIVE_GENERATION_SYSTEM_PROMPT, user_prompt)
+        return self.format_prompt(NAIVE_GENERATION_SYSTEM_PROMPT, user_prompt)
 
     def run(self, question: str) -> NaiveGenerationResult:
         return self.run_batch([question])[0]

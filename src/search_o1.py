@@ -135,7 +135,7 @@ class SearchO1(PromptedGenerationBase):
             "When done searching, continue your reasoning."
         )
         user_prompt = self._format_external_context("Question", question)
-        return self._to_prompt(system_prompt, user_prompt)
+        return self.format_prompt(system_prompt, user_prompt)
 
     def _build_refine_agent_prompt(self,
                                    prev_reasoning: str,
@@ -176,7 +176,7 @@ class SearchO1(PromptedGenerationBase):
             "Now you should analyze each web page and find helpful information based on the current search query "
             f"\"{search_query}\" and previous reasoning steps."
         ])
-        return self._to_prompt(system_prompt, user_prompt)
+        return self.format_prompt(system_prompt, user_prompt)
 
     def _parse_answer(self, text: str) -> str:
         return self._extract_last_tag(ANSWER_TAG_PATTERN, text)

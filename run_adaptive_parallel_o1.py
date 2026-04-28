@@ -26,15 +26,66 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retriever_top_k", type=int, default=5)
     parser.add_argument("--retriever_timeout", type=float, default=None)
 
-    parser.add_argument("--openai_base_url", type=str,
-                        default="http://127.0.0.1:8001")
-    parser.add_argument("--openai_api_key", type=str, default="TEST")
-    parser.add_argument("--model", type=str, default="Qwen3-14B")
-    parser.add_argument("--model_path", type=str, default=None,
-                        help="Local or HF model path used to load tokenizer for chat template")
-    parser.add_argument("--llm_timeout", type=float, default=None)
-    parser.add_argument("--use_chat_template", action="store_true",
-                        help="Render chat messages via tokenizer.apply_chat_template before /v1/completions")
+    parser.add_argument("--navigator_agent_model", type=str, default=None,
+                        help="Model used by navigator agent")
+    parser.add_argument("--navigator_agent_openai_base_url",
+                        type=str,
+                        default=None,
+                        help="Optional dedicated OpenAI base URL for navigator agent client")
+    parser.add_argument("--navigator_agent_openai_api_key",
+                        type=str,
+                        default=None,
+                        help="Optional dedicated OpenAI API key for navigator agent client")
+    parser.add_argument("--navigator_agent_llm_timeout",
+                        type=float,
+                        default=None,
+                        help="Optional dedicated timeout for navigator agent client")
+    parser.add_argument("--navigator_agent_model_path",
+                        type=str,
+                        default=None,
+                        help="Tokenizer source for navigator model when using chat template")
+    parser.add_argument("--navigator_agent_use_chat_template",
+                        action=argparse.BooleanOptionalAction,
+                        default=None,
+                        help="Whether navigator agent should use chat template; default inherits use_chat_template")
+
+    parser.add_argument("--global_refine_agent_model", type=str, default=None,
+                        help="Model used by global refine agent")
+    parser.add_argument("--global_refine_agent_openai_base_url",
+                        type=str,
+                        default=None,
+                        help="Optional dedicated OpenAI base URL for global refine agent client")
+    parser.add_argument("--global_refine_agent_openai_api_key",
+                        type=str,
+                        default=None,
+                        help="Optional dedicated OpenAI API key for global refine agent client")
+    parser.add_argument("--global_refine_agent_llm_timeout",
+                        type=float,
+                        default=None,
+                        help="Optional dedicated timeout for global refine agent client")
+    parser.add_argument("--global_refine_agent_model_path",
+                        type=str,
+                        default=None,
+                        help="Tokenizer source for global refine model when using chat template")
+    parser.add_argument("--global_refine_agent_use_chat_template",
+                        action=argparse.BooleanOptionalAction,
+                        default=None,
+                        help="Whether global refine agent should use chat template; default inherits navigator_agent_use_chat_template")
+
+    parser.add_argument("--path_agent_model", type=str, default=None,
+                        help="Model used by path agent")
+    parser.add_argument("--path_agent_openai_base_url", type=str, default=None,
+                        help="Optional dedicated OpenAI base URL for path agent client")
+    parser.add_argument("--path_agent_openai_api_key", type=str, default=None,
+                        help="Optional dedicated OpenAI API key for path agent client")
+    parser.add_argument("--path_agent_llm_timeout", type=float, default=None,
+                        help="Optional dedicated timeout for path agent client")
+    parser.add_argument("--path_agent_model_path", type=str, default=None,
+                        help="Tokenizer source for path model when using chat template")
+    parser.add_argument("--path_agent_use_chat_template",
+                        action=argparse.BooleanOptionalAction,
+                        default=None,
+                        help="Whether path agent should use chat template; default inherits navigator_agent_use_chat_template")
 
     parser.add_argument("--docs_per_query", type=int, default=5)
 
@@ -47,9 +98,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--path_agent_temperature", type=float, default=0.8)
     parser.add_argument("--path_agent_top_p", type=float, default=0.9)
 
-    parser.add_argument("--refine_max_tokens", type=int, default=1024)
-    parser.add_argument("--refine_temperature", type=float, default=0.8)
-    parser.add_argument("--refine_top_p", type=float, default=0.9)
+    parser.add_argument("--global_refine_agent_max_tokens",
+                        type=int,
+                        default=1024)
+    parser.add_argument("--global_refine_agent_temperature",
+                        type=float,
+                        default=0.8)
+    parser.add_argument("--global_refine_agent_top_p", type=float, default=0.9)
+
+    # Backward-compatible aliases.
+    parser.add_argument("--openai_base_url", type=str, default=None)
+    parser.add_argument("--openai_api_key", type=str, default=None)
+    parser.add_argument("--model", type=str, default=None)
+    parser.add_argument("--model_path", type=str, default=None)
+    parser.add_argument("--llm_timeout", type=float, default=None)
+    parser.add_argument("--use_chat_template",
+                        action="store_true", default=None)
+    parser.add_argument("--shared_openai_base_url", type=str, default=None)
+    parser.add_argument("--shared_openai_api_key", type=str, default=None)
+    parser.add_argument("--shared_llm_timeout", type=float, default=None)
+    parser.add_argument("--shared_model", type=str, default=None)
+    parser.add_argument("--shared_model_path", type=str, default=None)
+    parser.add_argument("--shared_use_chat_template",
+                        action=argparse.BooleanOptionalAction,
+                        default=None)
+    parser.add_argument("--refine_max_tokens", type=int, default=None)
+    parser.add_argument("--refine_temperature", type=float, default=None)
+    parser.add_argument("--refine_top_p", type=float, default=None)
 
     parser.add_argument("--stop_tokens", type=str,
                         default="</search>,</answer>,</search_directions>")
@@ -66,9 +141,14 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     input_file_path = Path(args.input_file)
+    output_model_name = (args.navigator_agent_model
+                         or args.global_refine_agent_model
+                         or args.shared_model
+                         or args.model
+                         or "Qwen3-14B")
     output_dir = build_output_dir(input_file_path,
                                   method_name="adaptive-parallel-o1",
-                                  model_name=args.model, top_dir=args.output_top_dir)
+                                  model_name=output_model_name, top_dir=args.output_top_dir)
     dataset_name = input_file_path.parent.name
 
     read_started_ns = time.perf_counter_ns()

@@ -46,7 +46,7 @@ class Cot(PromptedGenerationBase):
             self._format_external_context("Question", question),
             "Think step by step and then answer the question.",
         ])
-        return self._to_prompt(COT_SYSTEM_PROMPT, user_prompt)
+        return self.format_prompt(COT_SYSTEM_PROMPT, user_prompt)
 
     def run(self, question: str) -> CotResult:
         return self.run_batch([question])[0]

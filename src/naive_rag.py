@@ -73,7 +73,7 @@ class NaiveRAG(PromptedGenerationBase):
             information_block,
             "Answer the question directly using the related documents.",
         ])
-        return self._to_prompt(NAIVE_RAG_SYSTEM_PROMPT, user_prompt)
+        return self.format_prompt(NAIVE_RAG_SYSTEM_PROMPT, user_prompt)
 
     def run(self, question: str) -> NaiveRAGResult:
         return self.run_batch([question])[0]

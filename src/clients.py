@@ -153,7 +153,9 @@ class OpenAIClient:
             rendered_prompts.append(rendered_prompt)
         return rendered_prompts
 
-    def _build_payload(self, prompts: Any, config,
+    def _build_payload(self,
+                       prompts: Any,
+                       config,
                        stop_tokens: List[str]) -> Dict[str, Any]:
 
         if isinstance(config, dict):

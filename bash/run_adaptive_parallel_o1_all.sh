@@ -2,24 +2,36 @@
 set -euo pipefail
 
 DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
-RETRIEVER_BASE_URL="http://127.0.01:9100"
+RETRIEVER_BASE_URL="http://127.0.0.1:9100"
 # local
-OPENAI_BASE_URL="http://127.0.01:8000/"
-OPENAI_API_KEY="TEST"
+NAVIGATOR_AGENT_OPENAI_BASE_URL="http://127.0.0.1:8000/"
+NAVIGATOR_AGENT_OPENAI_API_KEY="TEST"
+NAVIGATOR_AGENT_MODEL="Qwen3-32B"
+NAVIGATOR_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
 
-MODEL="Qwen3-32B"
+GLOBAL_REFINE_AGENT_OPENAI_BASE_URL="http://127.0.0.1:8000/"
+GLOBAL_REFINE_AGENT_OPENAI_API_KEY="TEST"
+GLOBAL_REFINE_AGENT_MODEL="Qwen3-32B"
+GLOBAL_REFINE_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
+
+PATH_AGENT_OPENAI_BASE_URL="http://127.0.0.1:8001/"
+PATH_AGENT_OPENAI_API_KEY="TEST"
+PATH_AGENT_MODEL="Qwen3-4B"
+PATH_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-4B"
+
+
 NUM_SAMPLES=1024
 DATASETS=(
-  # bamboogle
-  # 2wikimultihopqa
-  # hotpotqa
-  # musique
-  # nq
-  # popqa
-  # triviaqa
-  # ambigqa
-  # gpqa
-  gaia
+  bamboogle
+  2wikimultihopqa
+  hotpotqa
+  musique
+  gpqa
+  nq
+  popqa
+  triviaqa
+  ambigqa
+  # gaia
 )
 
 for dataset in "${DATASETS[@]}"; do
@@ -30,7 +42,7 @@ for dataset in "${DATASETS[@]}"; do
     continue
   fi
 
-  dataset_output_root="./outputs/adaptive-parallel-o1/${MODEL}/${dataset}"
+  dataset_output_root="./outputs/adaptive-parallel-o1/${NAVIGATOR_AGENT_MODEL}/${dataset}"
   mkdir -p "$dataset_output_root"
 
   max_index="$(find "$dataset_output_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | grep -E '^[0-9]+$' | sort -n | tail -1 || true)"
@@ -54,23 +66,33 @@ for dataset in "${DATASETS[@]}"; do
     --batch_size 512 \
     --retriever_base_url "$RETRIEVER_BASE_URL" \
     --retriever_top_k 5 \
-    --openai_base_url "$OPENAI_BASE_URL" \
-    --openai_api_key "$OPENAI_API_KEY" \
-    --model "$MODEL" \
     --docs_per_query 5 \
+    --navigator_agent_openai_base_url "$NAVIGATOR_AGENT_OPENAI_BASE_URL" \
+    --navigator_agent_openai_api_key "$NAVIGATOR_AGENT_OPENAI_API_KEY" \
+    --navigator_agent_model "$NAVIGATOR_AGENT_MODEL" \
+    --navigator_agent_model_path "$NAVIGATOR_AGENT_MODEL_PATH" \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.9 \
+    --navigator_agent_temperature 0.8 \
     --navigator_agent_top_p 0.8 \
+    --navigator_agent_use_chat_template \
+    --global_refine_agent_openai_base_url "$GLOBAL_REFINE_AGENT_OPENAI_BASE_URL" \
+    --global_refine_agent_openai_api_key "$GLOBAL_REFINE_AGENT_OPENAI_API_KEY" \
+    --global_refine_agent_model "$GLOBAL_REFINE_AGENT_MODEL" \
+    --global_refine_agent_model_path "$GLOBAL_REFINE_AGENT_MODEL_PATH" \
+    --global_refine_agent_max_tokens 1024 \
+    --global_refine_agent_temperature 0.8 \
+    --global_refine_agent_top_p 0.8 \
+    --global_refine_agent_use_chat_template \
+    --path_agent_openai_base_url "$PATH_AGENT_OPENAI_BASE_URL" \
+    --path_agent_openai_api_key "$PATH_AGENT_OPENAI_API_KEY" \
+    --path_agent_model "$PATH_AGENT_MODEL" \
+    --path_agent_model_path "$PATH_AGENT_MODEL_PATH" \
     --path_agent_max_tokens 1024 \
-    --path_agent_temperature 0.9 \
+    --path_agent_temperature 0.8 \
     --path_agent_top_p 0.8 \
-    --refine_max_tokens 1024 \
-    --refine_temperature 0.9 \
-    --refine_top_p 0.9 \
+    --path_agent_use_chat_template \
     --max_iterations 5 \
-    --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
-    --num_samples "$NUM_SAMPLES" \
-    --use_chat_template
+    --num_samples "$NUM_SAMPLES"
 
   python evaluate.py \
     --result_file "$result_file" \

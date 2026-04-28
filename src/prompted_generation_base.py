@@ -65,7 +65,7 @@ class PromptedGenerationBase:
         think = self._extract_last_tag(THINK_TAG_PATTERN, text)
         return think if think else ""
 
-    def _to_prompt(self, system_content: str, user_content: str) -> Any:
+    def format_prompt(self, system_content: str, user_content: str) -> Any:
         if not self.use_chat_template:
             return f"{system_content}\n\n{user_content}"
         return [

@@ -1,3 +1,3 @@
-CUDA_VISIBLE_DEVICES="0,1,2,3" vllm serve Qwen3-32B --port 8000 --tensor-parallel-size 4 --gpu-memory-utilization 0.8 --api-key "TEST"
+CUDA_VISIBLE_DEVICES="0,1,2,3" vllm serve Qwen3-32B --port 8000 -tp 4 -dp 1 --gpu-memory-utilization 0.8 --api-key "TEST"
 
-CUDA_VISIBLE_DEVICES="6,7" vllm serve Qwen3-14B --port 8001 --tensor-parallel-size 2 --gpu-memory-utilization 0.85 --api-key "TEST"
+CUDA_VISIBLE_DEVICES="4,5" vllm serve Qwen3-1.7B --port 8001 -tp 1 -dp 2 --gpu-memory-utilization 0.85 --api-key "TEST"
