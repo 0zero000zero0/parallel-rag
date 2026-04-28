@@ -12,6 +12,8 @@ from src.prompted_generation_base import (PromptedGenerationBase,
 
 THINK_TAG_PATTERN = re.compile(r"<think>(.*?)</think>",
                                flags=re.DOTALL | re.IGNORECASE)
+SEARCH_QUERIES_TAG_PATTERN = re.compile(r"<search_queries>(.*?)</search_queries>",
+                                        flags=re.DOTALL | re.IGNORECASE)
 SEARCH_TAG_PATTERN = re.compile(r"<search>(.*?)</search>",
                                 flags=re.DOTALL | re.IGNORECASE)
 ANSWER_TAG_PATTERN = re.compile(r"<answer>(.*?)</answer>",
@@ -296,10 +298,14 @@ class ParallelRAG(PromptedGenerationBase):
 
     def _extract_searches(self, text: str) -> List[str]:
         searches: List[str] = []
-        for matched in SEARCH_TAG_PATTERN.findall(text):
-            query = matched.strip()
-            if query and query not in searches:
-                searches.append(query)
+        search_query_blocks = SEARCH_QUERIES_TAG_PATTERN.findall(text)
+        scopes = search_query_blocks if search_query_blocks else [text]
+
+        for scope in scopes:
+            for matched in SEARCH_TAG_PATTERN.findall(scope):
+                query = matched.strip()
+                if query and query not in searches:
+                    searches.append(query)
         return searches
 
     def _parse_answer(self, text: str) -> str:
@@ -345,14 +351,14 @@ class ParallelRAG(PromptedGenerationBase):
             "You receive the original question and historical refined reports. "
             "First think inside <think>...</think>. "
             "If information is sufficient, output final concise answer inside <answer>...</answer>. "
-            "If information is insufficient, output one or multiple concrete web search queries, each wrapped by <search>...</search>. "
-            "Do not output <search_directions>."
+            "If information is insufficient, output one or multiple concrete web search queries wrapped inside "
+            "<search_queries>...</search_queries>, and wrap each query with <search>...</search>. "
         )
         user_prompt = "\n\n".join([
             self._format_external_context("Original Question", question),
             self._format_external_context("Historical Refined Information R_<i>",
                                           history_block),
-            "Decide whether to answer now or output multiple <search> queries.",
+            "Decide whether to answer now or output multiple queries in <search_queries> with each query in <search>.",
         ])
         return self._format_prompt_by_template(system_prompt,
                                                user_prompt,
