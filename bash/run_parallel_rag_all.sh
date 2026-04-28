@@ -16,11 +16,11 @@ GLOBAL_REFINE_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
 
 NUM_SAMPLES=1024
 DATASETS=(
-  bamboogle
-  2wikimultihopqa
-  hotpotqa
-  musique
-  gpqa
+  # bamboogle
+  # 2wikimultihopqa
+  # hotpotqa
+  # musique
+  # gpqa
   nq
   popqa
   triviaqa
@@ -47,7 +47,6 @@ for DATASET in "${DATASETS[@]}"; do
 
   RESULT_DIR="${DATASET_OUTPUT_ROOT}/${NEXT_INDEX}"
   RESULT_FILE="${RESULT_DIR}/${DATASET}.jsonl"
-  mkdir -p "$RESULT_DIR"
 
   echo "=================================================="
   echo "Processing Dataset: ${DATASET}"
@@ -65,20 +64,20 @@ for DATASET in "${DATASETS[@]}"; do
     --navigator_agent_model "$NAVIGATOR_AGENT_MODEL" \
     --navigator_agent_model_path "$NAVIGATOR_AGENT_MODEL_PATH" \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.8 \
-    --navigator_agent_top_p 0.8 \
+    --navigator_agent_temperature 1.0 \
+    --navigator_agent_top_p 0.9 \
     --navigator_agent_use_chat_template \
     --global_refine_agent_openai_base_url "$GLOBAL_REFINE_AGENT_OPENAI_BASE_URL" \
     --global_refine_agent_openai_api_key "$GLOBAL_REFINE_AGENT_OPENAI_API_KEY" \
     --global_refine_agent_model "$GLOBAL_REFINE_AGENT_MODEL" \
     --global_refine_agent_model_path "$GLOBAL_REFINE_AGENT_MODEL_PATH" \
     --global_refine_agent_max_tokens 1024 \
-    --global_refine_agent_temperature 0.8 \
-    --global_refine_agent_top_p 0.8 \
+    --global_refine_agent_temperature 1.0 \
+    --global_refine_agent_top_p 0.9 \
     --global_refine_agent_use_chat_template \
     --synthesize_max_tokens 1024 \
-    --synthesize_temperature 0.8 \
-    --synthesize_top_p 0.8 \
+    --synthesize_temperature 1.0 \
+    --synthesize_top_p 0.9 \
     --max_iterations 5 \
     --num_samples "$NUM_SAMPLES"
 

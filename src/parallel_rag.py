@@ -356,7 +356,7 @@ class ParallelRAG(PromptedGenerationBase):
         )
         user_prompt = "\n\n".join([
             self._format_external_context("Original Question", question),
-            self._format_external_context("Historical Refined Information R_<i>",
+            self._format_external_context("Historical Refined Information",
                                           history_block),
             "Decide whether to answer now or output multiple queries in <search_queries> with each query in <search>.",
         ])
@@ -386,18 +386,30 @@ class ParallelRAG(PromptedGenerationBase):
         ]) if pooled_docs else "No documents in the pooled knowledge base."
 
         system_prompt = (
-            "You are the global_refine_agent. "
-            "Given original question, navigator thinking, search queries, and pooled documents, "
-            "extract the most useful factual information for the question. "
-            "If useful information exists, start output with 'Final Information' and then provide concise evidence-oriented text. "
-            "If nothing useful is found, output exactly: Final Information No helpful information found."
+            "You are the Global Refine Agent.\n"
+            "You are tasked with reading and analyzing document based on the following inputs: the original question, search queries, and a global document pool with provenance metadata.\n"
+            "Your objective is to extract relevant and helpful information for Current Search Query from the Searched document pool and seamlessly integrate this information into the Previous Reasoning Steps to continue reasoning for the original question.  Guidelines:\n"
+            "1. Analyze the Searched document pool:\n"
+            "  - Carefully review the content of each searched web page.\n"
+            "  - Identify factual information that is relevant to the Current Search Query and can aid in the reasoning process for the original question.\n"
+            "2. Extract Relevant Information:\n"
+            "  - Select the information from the Searched document pool that  directly contributes to advancing the Previous Reasoning  Steps.\n"
+            "  - Ensure that the extracted information is accurate and relevant.\n"
+            "3. Output Format: "
+            "  - If the document pool provide helpful information for current search query: Present the information beginning with `Final Information` as shown below.\n"
+            "Final Information[Helpful information here]\n"
+            "  - If the document pool do not provide any helpful information for current search query: Output the following text.\n"
+            "Final Information No helpful information found.\n\n"
+            "Inputs:"
         )
         user_prompt = "\n\n".join([
             self._format_external_context("Original Question", question),
-            self._format_external_context("Navigator Thinking",
+            self._format_external_context("Previous Navigator Agent Thinking",
                                           navigator_agent_think),
             self._format_external_context("Search Queries", query_block),
             self._format_external_context("Global Document Pool", docs_block),
+            "Now you should analyze each web page and find  helpful information based on the original question, this round's direction set, the concrete queries, and a global document pool with provenance metadata.",
+
         ])
         return self._format_prompt_by_template(system_prompt,
                                                user_prompt,
@@ -510,7 +522,7 @@ class ParallelRAG(PromptedGenerationBase):
 
     def run_batch(self,
                   questions: List[str],
-                  max_iterations: int = 4) -> List[ParallelRAGResult]:
+                  max_iterations: int = 5) -> List[ParallelRAGResult]:
         if not questions:
             return []
 

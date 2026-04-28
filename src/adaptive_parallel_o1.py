@@ -488,7 +488,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         )
         user_prompt = "\n\n".join([
             self._format_external_context("Original Question", question),
-            self._format_external_context("Historical Refined Information R_<i>",
+            self._format_external_context("Historical Refined Information",
                                           history_block),
             "Decide whether to answer now or propose the next retrieval directions.",
         ])
@@ -535,7 +535,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         ]) if directions else "None"
 
         query_block = "\n".join([
-            f"- Direction to Search : {plan['direction_id']} | Search Query: {plan['search_query']}"
+            f"- Search Direction : {plan['direction_id']} | Search Query: {plan['search_query']}"
             for plan in path_plans
         ]) if path_plans else "None"
 
@@ -570,7 +570,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         user_prompt = "\n\n".join([
             self._format_external_context("Original Question", question),
             self._format_external_context(
-                "Previous navigator_agent Thinking", navigator_agent_think),
+                "Previous Navigator Agent Thinking", navigator_agent_think),
             self._format_external_context(
                 "Search Directions", direction_block),
             self._format_external_context(

@@ -105,3 +105,8 @@ for dataset in "${DATASETS[@]}"; do
 done
 
 echo "All datasets done."
+
+python gather_metric.py \
+ --method adaptive-parallel-o1\
+ --model "${NAVIGATOR_AGENT_MODEL}" \
+ --outputs_root outputs
