@@ -4,22 +4,16 @@ import time
 from types import SimpleNamespace
 from typing import Any, Dict, List, TypedDict
 
-from src.clients import (BatchSearchDocs, OpenAIClient, RetrieverClient,
-                         RetrieverDocument)
-from src.prompted_generation_base import (PromptedGenerationBase,
-                                          build_retriever_client_from_args,
-                                          parse_stop_tokens)
+from src.clients import BatchSearchDocs, OpenAIClient, RetrieverClient, RetrieverDocument
+from src.prompted_generation_base import PromptedGenerationBase, build_retriever_client_from_args, parse_stop_tokens
 
-THINK_TAG_PATTERN = re.compile(r"<think>(.*?)</think>",
-                               flags=re.DOTALL | re.IGNORECASE)
-SEARCH_TAG_PATTERN = re.compile(r"<search>(.*?)</search>",
-                                flags=re.DOTALL | re.IGNORECASE)
-ANSWER_TAG_PATTERN = re.compile(r"<answer>(.*?)</answer>",
-                                flags=re.DOTALL | re.IGNORECASE)
-SEARCH_DIRECTIONS_PATTERN = re.compile(r"<search_directions>(.*?)</search_directions>",
-                                       flags=re.DOTALL | re.IGNORECASE)
-DIRECTION_TAG_PATTERN = re.compile(r"<direction(?:\s+id=[\"']?(.*?)[\"']?)?>(.*?)</direction>",
-                                   flags=re.DOTALL | re.IGNORECASE)
+THINK_TAG_PATTERN = re.compile(r"<think>(.*?)</think>", flags=re.DOTALL | re.IGNORECASE)
+SEARCH_TAG_PATTERN = re.compile(r"<search>(.*?)</search>", flags=re.DOTALL | re.IGNORECASE)
+ANSWER_TAG_PATTERN = re.compile(r"<answer>(.*?)</answer>", flags=re.DOTALL | re.IGNORECASE)
+SEARCH_DIRECTIONS_PATTERN = re.compile(r"<search_directions>(.*?)</search_directions>", flags=re.DOTALL | re.IGNORECASE)
+DIRECTION_TAG_PATTERN = re.compile(
+    r"<direction(?:\s+id=[\"']?(.*?)[\"']?)?>(.*?)</direction>", flags=re.DOTALL | re.IGNORECASE
+)
 
 
 def _coerce_bool(value: Any, default: bool = False) -> bool:
@@ -96,38 +90,42 @@ class ParallelO1Result(TypedDict):
 
 
 class AdaptiveParallelO1(PromptedGenerationBase):
-    def __init__(self,
-                 retriever: RetrieverClient,
-                 navigator_agent_llm_client: OpenAIClient,
-                 global_refine_agent_llm_client: OpenAIClient,
-                 path_agent_llm_client: OpenAIClient,
-                 docs_per_query: int = 3,
-                 navigator_agent_max_tokens: int = 512,
-                 navigator_agent_temperature: float = 0.6,
-                 navigator_agent_top_p: float = 0.9,
-                 path_agent_max_tokens: int = 512,
-                 path_agent_temperature: float = 0.8,
-                 path_agent_top_p: float = 0.95,
-                 global_refine_agent_max_tokens: int = 512,
-                 global_refine_agent_temperature: float = 0.2,
-                 global_refine_agent_top_p: float = 0.9,
-                 synthesize_max_tokens: int = 512,
-                 synthesize_temperature: float = 0.3,
-                 synthesize_top_p: float = 0.9,
-                 stop_tokens: List[str] | None = None,
-                 navigator_agent_use_chat_template: bool = False,
-                 navigator_agent_tokenizer: Any = None,
-                 global_refine_agent_use_chat_template: bool = False,
-                 global_refine_agent_tokenizer: Any = None,
-                 path_agent_use_chat_template: bool = False,
-                 path_tokenizer: Any = None):
-        super().__init__(llm_client=navigator_agent_llm_client,
-                         generation_max_tokens=synthesize_max_tokens,
-                         generation_temperature=synthesize_temperature,
-                         generation_top_p=synthesize_top_p,
-                         stop_tokens=stop_tokens,
-                         use_chat_template=navigator_agent_use_chat_template,
-                         tokenizer=navigator_agent_tokenizer)
+    def __init__(
+        self,
+        retriever: RetrieverClient,
+        navigator_agent_llm_client: OpenAIClient,
+        global_refine_agent_llm_client: OpenAIClient,
+        path_agent_llm_client: OpenAIClient,
+        docs_per_query: int = 3,
+        navigator_agent_max_tokens: int = 512,
+        navigator_agent_temperature: float = 0.6,
+        navigator_agent_top_p: float = 0.9,
+        path_agent_max_tokens: int = 512,
+        path_agent_temperature: float = 0.8,
+        path_agent_top_p: float = 0.95,
+        global_refine_agent_max_tokens: int = 512,
+        global_refine_agent_temperature: float = 0.2,
+        global_refine_agent_top_p: float = 0.9,
+        synthesize_max_tokens: int = 512,
+        synthesize_temperature: float = 0.3,
+        synthesize_top_p: float = 0.9,
+        stop_tokens: List[str] | None = None,
+        navigator_agent_use_chat_template: bool = False,
+        navigator_agent_tokenizer: Any = None,
+        global_refine_agent_use_chat_template: bool = False,
+        global_refine_agent_tokenizer: Any = None,
+        path_agent_use_chat_template: bool = False,
+        path_tokenizer: Any = None,
+    ):
+        super().__init__(
+            llm_client=navigator_agent_llm_client,
+            generation_max_tokens=synthesize_max_tokens,
+            generation_temperature=synthesize_temperature,
+            generation_top_p=synthesize_top_p,
+            stop_tokens=stop_tokens,
+            use_chat_template=navigator_agent_use_chat_template,
+            tokenizer=navigator_agent_tokenizer,
+        )
         self.retriever = retriever
         self.navigator_agent_llm_client = navigator_agent_llm_client
         self.global_refine_agent_llm_client = global_refine_agent_llm_client
@@ -154,88 +152,73 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
         if self.global_refine_agent_use_chat_template and self.global_refine_agent_tokenizer is None:
             raise ValueError(
-                "global_refine_agent_tokenizer is required when global_refine_agent_use_chat_template=True")
+                "global_refine_agent_tokenizer is required when global_refine_agent_use_chat_template=True"
+            )
 
         if self.path_agent_use_chat_template and self.path_agent_tokenizer is None:
-            raise ValueError(
-                "path_tokenizer is required when path_agent_use_chat_template=True")
+            raise ValueError("path_tokenizer is required when path_agent_use_chat_template=True")
         self.latest_batch_timing: Dict[str, Any] = {}
 
     @classmethod
     def from_args(cls, args) -> "AdaptiveParallelO1":
         navigator_agent_use_chat_template = _coerce_bool(
-            _first_not_none(getattr(args,
-                                    "navigator_agent_use_chat_template",
-                                    None),
-                            getattr(args, "shared_use_chat_template", None),
-                            getattr(args, "use_chat_template", None)),
-            default=False)
-        global_refine_agent_use_chat_template_raw = getattr(args,
-                                                            "global_refine_agent_use_chat_template",
-                                                            None)
+            _first_not_none(
+                getattr(args, "navigator_agent_use_chat_template", None),
+                getattr(args, "shared_use_chat_template", None),
+                getattr(args, "use_chat_template", None),
+            ),
+            default=False,
+        )
+        global_refine_agent_use_chat_template_raw = getattr(args, "global_refine_agent_use_chat_template", None)
         global_refine_agent_use_chat_template = _coerce_bool(
-            global_refine_agent_use_chat_template_raw,
-            default=navigator_agent_use_chat_template)
-        path_agent_use_chat_template_raw = getattr(args,
-                                                   "path_agent_use_chat_template",
-                                                   None)
+            global_refine_agent_use_chat_template_raw, default=navigator_agent_use_chat_template
+        )
+        path_agent_use_chat_template_raw = getattr(args, "path_agent_use_chat_template", None)
         path_agent_use_chat_template = _coerce_bool(
-            path_agent_use_chat_template_raw,
-            default=navigator_agent_use_chat_template)
+            path_agent_use_chat_template_raw, default=navigator_agent_use_chat_template
+        )
 
-        navigator_agent_model = _first_not_none(getattr(args,
-                                                        "navigator_agent_model",
-                                                        None),
-                                                getattr(args,
-                                                        "shared_model",
-                                                        None),
-                                                getattr(args,
-                                                        "model",
-                                                        None),
-                                                getattr(args,
-                                                        "llm_model",
-                                                        None),
-                                                "Qwen3-14B")
+        navigator_agent_model = _first_not_none(
+            getattr(args, "navigator_agent_model", None),
+            getattr(args, "shared_model", None),
+            getattr(args, "model", None),
+            getattr(args, "llm_model", None),
+            "Qwen3-14B",
+        )
         global_refine_agent_model = _first_not_none(
             getattr(args, "global_refine_agent_model", None),
             getattr(args, "shared_model", None),
             getattr(args, "model", None),
             getattr(args, "llm_model", None),
-            navigator_agent_model)
-        path_agent_model = getattr(args, "path_agent_model", None) \
-            or navigator_agent_model
+            navigator_agent_model,
+        )
+        path_agent_model = getattr(args, "path_agent_model", None) or navigator_agent_model
 
-        navigator_agent_model_path = _first_not_none(getattr(args,
-                                                             "navigator_agent_model_path",
-                                                             None),
-                                                     getattr(args,
-                                                             "shared_model_path",
-                                                             None),
-                                                     getattr(args,
-                                                             "model_path",
-                                                             None),
-                                                     navigator_agent_model)
+        navigator_agent_model_path = _first_not_none(
+            getattr(args, "navigator_agent_model_path", None),
+            getattr(args, "shared_model_path", None),
+            getattr(args, "model_path", None),
+            navigator_agent_model,
+        )
         global_refine_agent_model_path = _first_not_none(
             getattr(args, "global_refine_agent_model_path", None),
             getattr(args, "shared_model_path", None),
             getattr(args, "model_path", None),
-            global_refine_agent_model)
-        path_agent_model_path = getattr(args, "path_agent_model_path", None) \
-            or path_agent_model
+            global_refine_agent_model,
+        )
+        path_agent_model_path = getattr(args, "path_agent_model_path", None) or path_agent_model
 
         navigator_agent_tokenizer = _first_not_none(
-            getattr(args, "navigator_agent_tokenizer", None),
-            getattr(args, "shared_tokenizer", None))
+            getattr(args, "navigator_agent_tokenizer", None), getattr(args, "shared_tokenizer", None)
+        )
         if navigator_agent_use_chat_template and navigator_agent_tokenizer is None:
-            navigator_agent_tokenizer = _load_tokenizer(
-                navigator_agent_model_path)
+            navigator_agent_tokenizer = _load_tokenizer(navigator_agent_model_path)
 
         global_refine_agent_tokenizer = _first_not_none(
-            getattr(args, "global_refine_agent_tokenizer", None),
-            getattr(args, "shared_tokenizer", None))
+            getattr(args, "global_refine_agent_tokenizer", None), getattr(args, "shared_tokenizer", None)
+        )
         if global_refine_agent_use_chat_template and global_refine_agent_tokenizer is None:
-            global_refine_agent_tokenizer = _load_tokenizer(
-                global_refine_agent_model_path)
+            global_refine_agent_tokenizer = _load_tokenizer(global_refine_agent_model_path)
 
         path_tokenizer = getattr(args, "path_tokenizer", None)
         if path_agent_use_chat_template and path_tokenizer is None:
@@ -243,168 +226,126 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
         retriever_client = build_retriever_client_from_args(args)
         navigator_agent_llm_client = OpenAIClient(
-            base_url=_first_not_none(getattr(args,
-                                             "navigator_agent_openai_base_url",
-                                             None),
-                                     getattr(args,
-                                             "shared_openai_base_url",
-                                             None),
-                                     getattr(args,
-                                             "openai_base_url",
-                                             None),
-                                     "http://127.0.0.1:8001"),
+            base_url=_first_not_none(
+                getattr(args, "navigator_agent_openai_base_url", None),
+                getattr(args, "shared_openai_base_url", None),
+                getattr(args, "openai_base_url", None),
+                "http://127.0.0.1:8001",
+            ),
             model=navigator_agent_model,
-            api_key=_first_not_none(getattr(args,
-                                            "navigator_agent_openai_api_key",
-                                            None),
-                                    getattr(args,
-                                            "shared_openai_api_key",
-                                            None),
-                                    getattr(args, "openai_api_key", None),
-                                    "TEST"),
-            timeout=_first_not_none(getattr(args,
-                                            "navigator_agent_llm_timeout",
-                                            None),
-                                    getattr(args,
-                                            "shared_llm_timeout",
-                                            None),
-                                    getattr(args, "llm_timeout", None)),
-            use_chat_template=navigator_agent_use_chat_template)
+            api_key=_first_not_none(
+                getattr(args, "navigator_agent_openai_api_key", None),
+                getattr(args, "shared_openai_api_key", None),
+                getattr(args, "openai_api_key", None),
+                "TEST",
+            ),
+            timeout=_first_not_none(
+                getattr(args, "navigator_agent_llm_timeout", None),
+                getattr(args, "shared_llm_timeout", None),
+                getattr(args, "llm_timeout", None),
+            ),
+            use_chat_template=navigator_agent_use_chat_template,
+        )
         global_refine_agent_llm_client = OpenAIClient(
-            base_url=_first_not_none(getattr(args,
-                                             "global_refine_agent_openai_base_url",
-                                             None),
-                                     getattr(args,
-                                             "shared_openai_base_url",
-                                             None),
-                                     getattr(args,
-                                             "openai_base_url",
-                                             None),
-                                     "http://127.0.0.1:8001"),
+            base_url=_first_not_none(
+                getattr(args, "global_refine_agent_openai_base_url", None),
+                getattr(args, "shared_openai_base_url", None),
+                getattr(args, "openai_base_url", None),
+                "http://127.0.0.1:8001",
+            ),
             model=global_refine_agent_model,
-            api_key=_first_not_none(getattr(args,
-                                            "global_refine_agent_openai_api_key",
-                                            None),
-                                    getattr(args,
-                                            "shared_openai_api_key",
-                                            None),
-                                    getattr(args, "openai_api_key", None),
-                                    "TEST"),
-            timeout=_first_not_none(getattr(args,
-                                            "global_refine_agent_llm_timeout",
-                                            None),
-                                    getattr(args,
-                                            "shared_llm_timeout",
-                                            None),
-                                    getattr(args, "llm_timeout", None)),
-            use_chat_template=global_refine_agent_use_chat_template)
+            api_key=_first_not_none(
+                getattr(args, "global_refine_agent_openai_api_key", None),
+                getattr(args, "shared_openai_api_key", None),
+                getattr(args, "openai_api_key", None),
+                "TEST",
+            ),
+            timeout=_first_not_none(
+                getattr(args, "global_refine_agent_llm_timeout", None),
+                getattr(args, "shared_llm_timeout", None),
+                getattr(args, "llm_timeout", None),
+            ),
+            use_chat_template=global_refine_agent_use_chat_template,
+        )
         path_agent_llm_client = OpenAIClient(
-            base_url=_first_not_none(getattr(args,
-                                             "path_agent_openai_base_url",
-                                             None),
-                                     getattr(args,
-                                             "navigator_agent_openai_base_url",
-                                             None),
-                                     getattr(args,
-                                             "shared_openai_base_url",
-                                             None),
-                                     getattr(args,
-                                             "openai_base_url",
-                                             None),
-                                     "http://127.0.0.1:8001"),
+            base_url=_first_not_none(
+                getattr(args, "path_agent_openai_base_url", None),
+                getattr(args, "navigator_agent_openai_base_url", None),
+                getattr(args, "shared_openai_base_url", None),
+                getattr(args, "openai_base_url", None),
+                "http://127.0.0.1:8001",
+            ),
             model=path_agent_model,
-            api_key=_first_not_none(getattr(args,
-                                            "path_agent_openai_api_key",
-                                            None),
-                                    getattr(args,
-                                    "navigator_agent_openai_api_key",
-                                            None),
-                                    getattr(args,
-                                            "shared_openai_api_key",
-                                            None),
-                                    getattr(args, "openai_api_key", None),
-                                    "TEST"),
-            timeout=_first_not_none(getattr(args,
-                                            "path_agent_llm_timeout",
-                                            None),
-                                    getattr(args,
-                                    "navigator_agent_llm_timeout",
-                                            None),
-                                    getattr(args,
-                                            "shared_llm_timeout",
-                                            None),
-                                    getattr(args, "llm_timeout", None)),
-            use_chat_template=path_agent_use_chat_template)
+            api_key=_first_not_none(
+                getattr(args, "path_agent_openai_api_key", None),
+                getattr(args, "navigator_agent_openai_api_key", None),
+                getattr(args, "shared_openai_api_key", None),
+                getattr(args, "openai_api_key", None),
+                "TEST",
+            ),
+            timeout=_first_not_none(
+                getattr(args, "path_agent_llm_timeout", None),
+                getattr(args, "navigator_agent_llm_timeout", None),
+                getattr(args, "shared_llm_timeout", None),
+                getattr(args, "llm_timeout", None),
+            ),
+            use_chat_template=path_agent_use_chat_template,
+        )
 
         docs_per_query = int(getattr(args, "docs_per_query", 3))
 
-        navigator_agent_max_tokens = int(
-            getattr(args, "navigator_agent_max_tokens", 256))
-        navigator_agent_temperature = float(
-            getattr(args, "navigator_agent_temperature", 0.6))
-        navigator_agent_top_p = float(
-            getattr(args, "navigator_agent_top_p", 0.9))
+        navigator_agent_max_tokens = int(getattr(args, "navigator_agent_max_tokens", 256))
+        navigator_agent_temperature = float(getattr(args, "navigator_agent_temperature", 0.6))
+        navigator_agent_top_p = float(getattr(args, "navigator_agent_top_p", 0.9))
 
-        path_agent_max_tokens = int(
-            getattr(args, "path_agent_max_tokens", 384))
-        path_agent_temperature = float(
-            getattr(args, "path_agent_temperature", 0.8))
+        path_agent_max_tokens = int(getattr(args, "path_agent_max_tokens", 384))
+        path_agent_temperature = float(getattr(args, "path_agent_temperature", 0.8))
         path_agent_top_p = float(getattr(args, "path_agent_top_p", 0.95))
 
         global_refine_agent_max_tokens = int(
-            getattr(args,
-                    "global_refine_agent_max_tokens",
-                    getattr(args, "refine_max_tokens", 384)))
+            getattr(args, "global_refine_agent_max_tokens", getattr(args, "refine_max_tokens", 384))
+        )
         global_refine_agent_temperature = float(
-            getattr(args,
-                    "global_refine_agent_temperature",
-                    getattr(args, "refine_temperature", 0.2)))
+            getattr(args, "global_refine_agent_temperature", getattr(args, "refine_temperature", 0.2))
+        )
         global_refine_agent_top_p = float(
-            getattr(args,
-                    "global_refine_agent_top_p",
-                    getattr(args, "refine_top_p", 0.9)))
+            getattr(args, "global_refine_agent_top_p", getattr(args, "refine_top_p", 0.9))
+        )
 
-        synthesize_max_tokens = int(
-            getattr(args, "synthesize_max_tokens", 768))
-        synthesize_temperature = float(
-            getattr(args, "synthesize_temperature", 0.3))
+        synthesize_max_tokens = int(getattr(args, "synthesize_max_tokens", 768))
+        synthesize_temperature = float(getattr(args, "synthesize_temperature", 0.3))
         synthesize_top_p = float(getattr(args, "synthesize_top_p", 0.9))
-        return cls(retriever=retriever_client,
-                   navigator_agent_llm_client=navigator_agent_llm_client,
-                   global_refine_agent_llm_client=global_refine_agent_llm_client,
-                   path_agent_llm_client=path_agent_llm_client,
-                   docs_per_query=docs_per_query,
-                   navigator_agent_max_tokens=navigator_agent_max_tokens,
-                   navigator_agent_temperature=navigator_agent_temperature,
-                   navigator_agent_top_p=navigator_agent_top_p,
-                   path_agent_max_tokens=path_agent_max_tokens,
-                   path_agent_temperature=path_agent_temperature,
-                   path_agent_top_p=path_agent_top_p,
-                   global_refine_agent_max_tokens=global_refine_agent_max_tokens,
-                   global_refine_agent_temperature=global_refine_agent_temperature,
-                   global_refine_agent_top_p=global_refine_agent_top_p,
-                   synthesize_max_tokens=synthesize_max_tokens,
-                   synthesize_temperature=synthesize_temperature,
-                   synthesize_top_p=synthesize_top_p,
-                   stop_tokens=parse_stop_tokens(args),
-                   navigator_agent_use_chat_template=navigator_agent_use_chat_template,
-                   navigator_agent_tokenizer=navigator_agent_tokenizer,
-                   global_refine_agent_use_chat_template=global_refine_agent_use_chat_template,
-                   global_refine_agent_tokenizer=global_refine_agent_tokenizer,
-                   path_agent_use_chat_template=path_agent_use_chat_template,
-                   path_tokenizer=path_tokenizer)
+        return cls(
+            retriever=retriever_client,
+            navigator_agent_llm_client=navigator_agent_llm_client,
+            global_refine_agent_llm_client=global_refine_agent_llm_client,
+            path_agent_llm_client=path_agent_llm_client,
+            docs_per_query=docs_per_query,
+            navigator_agent_max_tokens=navigator_agent_max_tokens,
+            navigator_agent_temperature=navigator_agent_temperature,
+            navigator_agent_top_p=navigator_agent_top_p,
+            path_agent_max_tokens=path_agent_max_tokens,
+            path_agent_temperature=path_agent_temperature,
+            path_agent_top_p=path_agent_top_p,
+            global_refine_agent_max_tokens=global_refine_agent_max_tokens,
+            global_refine_agent_temperature=global_refine_agent_temperature,
+            global_refine_agent_top_p=global_refine_agent_top_p,
+            synthesize_max_tokens=synthesize_max_tokens,
+            synthesize_temperature=synthesize_temperature,
+            synthesize_top_p=synthesize_top_p,
+            stop_tokens=parse_stop_tokens(args),
+            navigator_agent_use_chat_template=navigator_agent_use_chat_template,
+            navigator_agent_tokenizer=navigator_agent_tokenizer,
+            global_refine_agent_use_chat_template=global_refine_agent_use_chat_template,
+            global_refine_agent_tokenizer=global_refine_agent_tokenizer,
+            path_agent_use_chat_template=path_agent_use_chat_template,
+            path_tokenizer=path_tokenizer,
+        )
 
-    def _make_config(self, max_tokens: int, temperature: float,
-                     top_p: float) -> SimpleNamespace:
-        return SimpleNamespace(max_completion_length=max_tokens,
-                               temperature=temperature,
-                               top_p=top_p,
-                               vllm_n=1)
+    def _make_config(self, max_tokens: int, temperature: float, top_p: float) -> SimpleNamespace:
+        return SimpleNamespace(max_completion_length=max_tokens, temperature=temperature, top_p=top_p, vllm_n=1)
 
-    def _format_prompt_by_template(self,
-                                   system_prompt: str,
-                                   user_prompt: str,
-                                   use_chat_template: bool) -> Any:
+    def _format_prompt_by_template(self, system_prompt: str, user_prompt: str, use_chat_template: bool) -> Any:
         if not use_chat_template:
             return f"{system_prompt}\n\n{user_prompt}"
         return [
@@ -420,27 +361,24 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 searches.append(q)
         return searches
 
-    def _generate_text_batch(self, prompts: List[Any],
-                             config: SimpleNamespace,
-                             llm_client: OpenAIClient,
-                             tokenizer: Any = None,
-                             use_chat_template: bool | None = None) -> List[str]:
+    def _generate_text_batch(
+        self,
+        prompts: List[Any],
+        config: SimpleNamespace,
+        llm_client: OpenAIClient,
+        tokenizer: Any = None,
+        use_chat_template: bool | None = None,
+    ) -> List[str]:
         if not prompts:
             return []
 
-        active_use_chat_template = self.use_chat_template if use_chat_template is None else bool(
-            use_chat_template)
+        active_use_chat_template = self.use_chat_template if use_chat_template is None else bool(use_chat_template)
 
         if not active_use_chat_template:
             prompt_texts = [self._prompt_to_text(p) for p in prompts]
-            return llm_client.generate_text(prompt_texts,
-                                            config,
-                                            self.stop_tokens)
+            return llm_client.generate_text(prompt_texts, config, self.stop_tokens)
 
-        return llm_client.generate_text(prompts,
-                                        config,
-                                        self.stop_tokens,
-                                        tokenizer=tokenizer)
+        return llm_client.generate_text(prompts, config, self.stop_tokens, tokenizer=tokenizer)
 
     def _extract_think(self, text: str) -> str:
         extracted = self._extract_last_tag(THINK_TAG_PATTERN, text)
@@ -453,54 +391,52 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
         block = block_match.group(1)
         directions: List[SearchDirection] = []
-        for idx, match in enumerate(DIRECTION_TAG_PATTERN.finditer(block),
-                                    start=1):
+        for idx, match in enumerate(DIRECTION_TAG_PATTERN.finditer(block), start=1):
             direction_id = (match.group(1) or str(idx)).strip() or str(idx)
             direction_text = re.sub(r"\s+", " ", match.group(2)).strip()
             if not direction_text:
                 continue
-            directions.append({
-                "direction_id": direction_id,
-                "direction": direction_text,
-            })
+            directions.append(
+                {
+                    "direction_id": direction_id,
+                    "direction": direction_text,
+                }
+            )
 
         return directions
 
-    def _build_navigator_agent_prompt(self,
-                                      question: str,
-                                      historical_refinements: List[str],
-                                      use_chat_template: bool) -> Any:
-        history_block = "\n\n".join([
-            f"R_{idx + 1}:\n{report}"
-            for idx, report in enumerate(historical_refinements)
-        ]) if historical_refinements else "None"
+    def _build_navigator_agent_prompt(
+        self, question: str, historical_refinements: List[str], use_chat_template: bool
+    ) -> Any:
+        history_block = (
+            "\n\n".join([f"R_{idx + 1}:\n{report}" for idx, report in enumerate(historical_refinements)])
+            if historical_refinements
+            else "None"
+        )
 
         system_prompt = (
-            "You are a navigator_agent agent in a multi-stage retrieval reasoning system to answer the user's question. "
-            "You receive the original question and the historical global refinement reports R_<i>. "
+            "You are a navigator agent in a multi-stage retrieval reasoning system to answer the user's question. "
+            "You receive the original question and the historical global refinement reports. "
             "You must first think globally inside <think>...</think>. "
             "If the available information is sufficient, output the final concise short answer inside <answer>...</answer>. "
             "If you lack of some external informatioin, you can output a dynamic set of abstract retrieval directions inside <search_directions>...</search_directions>. "
-            "Each direction must be wrapped in <direction id=\"k\">...</direction>. "
-            "And the system will return relative informatio inside <information>...</information>"
+            'Each direction must be wrapped in <direction id="k">...</direction>. '
+            "And the system will return relative information inside <information>...</information>. "
             "Each direction should explicitly describe the entity, relation, attribute, and the information gap that needs to be filled. "
             "You may produce as many directions as needed for this round."
         )
-        user_prompt = "\n\n".join([
-            self._format_external_context("Original Question", question),
-            self._format_external_context("Historical Refined Information",
-                                          history_block),
-            "Decide whether to answer now or propose the next retrieval directions.",
-        ])
-        return self._format_prompt_by_template(system_prompt,
-                                               user_prompt,
-                                               use_chat_template)
+        user_prompt = "\n\n".join(
+            [
+                self._format_external_context("Original Question", question),
+                self._format_external_context("Historical Refined Information", history_block),
+                "Decide whether to answer now or propose the next retrieval directions.",
+            ]
+        )
+        return self._format_prompt_by_template(system_prompt, user_prompt, use_chat_template)
 
-    def _build_path_agent_prompt(self,
-                                 original_question: str,
-                                 navigator_agent_think: str,
-                                 direction: SearchDirection,
-                                 use_chat_template: bool) -> Any:
+    def _build_path_agent_prompt(
+        self, original_question: str, navigator_agent_think: str, direction: SearchDirection, use_chat_template: bool
+    ) -> Any:
         system_prompt = (
             "You are a helpful assistant that help navigator_agent Agent to answer user's question. "
             "You will receive the original question, the navigator_agent Agent's current  thoughts, and one assigned retrieval direction by navigator_agent Agent. "
@@ -508,47 +444,64 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             "You must reason locally inside <think>...</think> and then output exactly one search query inside <search>...</search>. "
             "The query should be precise, operational, and directly aligned with the assigned direction."
         )
-        user_prompt = "\n\n".join([
-            self._format_external_context(
-                "Original Question", original_question),
-            self._format_external_context(
-                "navigator_agent Thinking", navigator_agent_think),
-            self._format_external_context(
-                f"Assigned Direction {direction['direction_id']}",
-                direction["direction"]),
-            "Now think about above information and put your search query in <search>...</search>",
-        ])
-        return self._format_prompt_by_template(system_prompt,
-                                               user_prompt,
-                                               use_chat_template)
+        user_prompt = "\n\n".join(
+            [
+                self._format_external_context("Original Question", original_question),
+                self._format_external_context("navigator_agent Thinking", navigator_agent_think),
+                self._format_external_context(
+                    f"Assigned Direction {direction['direction_id']}", direction["direction"]
+                ),
+                "Now think about above information and put your search query in <search>...</search>",
+            ]
+        )
+        return self._format_prompt_by_template(system_prompt, user_prompt, use_chat_template)
 
-    def _build_global_refine_agent_prompt(self,
-                                          question: str,
-                                          navigator_agent_think: str,
-                                          directions: List[SearchDirection],
-                                          path_plans: List[PathPlan],
-                                          pooled_docs: List[PooledDocument],
-                                          use_chat_template: bool) -> Any:
-        direction_block = "\n".join([
-            f"- Direction {direction['direction_id']}: {direction['direction']}"
-            for direction in directions
-        ]) if directions else "None"
+    def _build_global_refine_agent_prompt(
+        self,
+        question: str,
+        navigator_agent_think: str,
+        directions: List[SearchDirection],
+        path_plans: List[PathPlan],
+        pooled_docs: List[PooledDocument],
+        use_chat_template: bool,
+    ) -> Any:
+        direction_block = (
+            "\n".join(
+                [f"- Direction {direction['direction_id']}: {direction['direction']}" for direction in directions]
+            )
+            if directions
+            else "None"
+        )
 
-        query_block = "\n".join([
-            f"- Search Direction : {plan['direction_id']} | Search Query: {plan['search_query']}"
-            for plan in path_plans
-        ]) if path_plans else "None"
+        query_block = (
+            "\n".join(
+                [
+                    f"- Search Direction : {plan['direction_id']} | Search Query: {plan['search_query']}"
+                    for plan in path_plans
+                ]
+            )
+            if path_plans
+            else "None"
+        )
 
-        docs_block = "\n\n".join([
-            "\n".join([
-                f"DocID: {doc['doc_id']}",
-                f"Sources: {', '.join(doc['sources'])}",
-                f"Source Directions: {' | '.join(doc['source_directions'])}",
-                f"Source Queries: {' | '.join(doc['source_queries'])}",
-                f"Content: {doc['contents']}",
-            ])
-            for doc in pooled_docs
-        ]) if pooled_docs else "No documents in the pooled knowledge base."
+        docs_block = (
+            "\n\n".join(
+                [
+                    "\n".join(
+                        [
+                            f"DocID: {doc['doc_id']}",
+                            f"Sources: {', '.join(doc['sources'])}",
+                            f"Source Directions: {' | '.join(doc['source_directions'])}",
+                            f"Source Queries: {' | '.join(doc['source_queries'])}",
+                            f"Content: {doc['contents']}",
+                        ]
+                    )
+                    for doc in pooled_docs
+                ]
+            )
+            if pooled_docs
+            else "No documents in the pooled knowledge base."
+        )
 
         system_prompt = (
             "You are the Global Refine Agent.\n"
@@ -567,51 +520,41 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             "Final Information No helpful information found.\n\n"
             "Inputs:"
         )
-        user_prompt = "\n\n".join([
-            self._format_external_context("Original Question", question),
-            self._format_external_context(
-                "Previous Navigator Agent Thinking", navigator_agent_think),
-            self._format_external_context(
-                "Search Directions", direction_block),
-            self._format_external_context(
-                "Concrete Search Queries", query_block),
-            self._format_external_context(
-                "Global Document Pool", docs_block),
-            "Now you should analyze each web page and find  helpful information based on the original question, this round's direction set, the concrete queries, and a global document pool with provenance metadata.",
-        ])
-        return self._format_prompt_by_template(system_prompt,
-                                               user_prompt,
-                                               use_chat_template)
-
-    def _build_refinement_appendix(self,
-                                   report: str) -> str:
-        return (
-            "\n<information>\n"
-            f"{report}"
-            "\n</information>\n"
+        user_prompt = "\n\n".join(
+            [
+                self._format_external_context("Original Question", question),
+                self._format_external_context("Previous Navigator Agent Thinking", navigator_agent_think),
+                self._format_external_context("Search Directions", direction_block),
+                self._format_external_context("Concrete Search Queries", query_block),
+                self._format_external_context("Global Document Pool", docs_block),
+                "Now you should analyze each web page and find  helpful information based on the original question, this round's direction set, the concrete queries, and a global document pool with provenance metadata.",
+            ]
         )
+        return self._format_prompt_by_template(system_prompt, user_prompt, use_chat_template)
 
-    def _build_final_answer_prompt(self,
-                                   question: str,
-                                   historical_refinements: List[str],
-                                   use_chat_template: bool) -> Any:
-        history_block = "\n\n".join([
-            f"R_{idx + 1}:\n{report}"
-            for idx, report in enumerate(historical_refinements)
-        ]) if historical_refinements else "None"
+    def _build_refinement_appendix(self, report: str) -> str:
+        return "\n<information>\n" f"{report}" "\n</information>\n"
+
+    def _build_final_answer_prompt(
+        self, question: str, historical_refinements: List[str], use_chat_template: bool
+    ) -> Any:
+        history_block = (
+            "\n\n".join([f"R_{idx + 1}:\n{report}" for idx, report in enumerate(historical_refinements)])
+            if historical_refinements
+            else "None"
+        )
         system_prompt = (
             "You are the navigator_agent Agent. "
             "Use the historical global refinement reports to provide the best final answer now. "
             "Output only the concise final answer inside <answer>...</answer>."
         )
-        user_prompt = "\n\n".join([
-            self._format_external_context("Original Question", question),
-            self._format_external_context(
-                "Historical Global Refinements", history_block),
-        ])
-        return self._format_prompt_by_template(system_prompt,
-                                               user_prompt,
-                                               use_chat_template)
+        user_prompt = "\n\n".join(
+            [
+                self._format_external_context("Original Question", question),
+                self._format_external_context("Historical Global Refinements", history_block),
+            ]
+        )
+        return self._format_prompt_by_template(system_prompt, user_prompt, use_chat_template)
 
     def _make_doc_key(self, doc: RetrieverDocument) -> str:
         doc_id = str(doc.get("id", "")).strip()
@@ -620,10 +563,9 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         contents = str(doc.get("contents", ""))
         return hashlib.sha1(contents.encode("utf-8")).hexdigest()
 
-    def _pool_documents(self,
-                        path_plans: List[PathPlan],
-                        docs_map: dict[tuple[int, int], List[RetrieverDocument]],
-                        sample_i: int) -> List[PooledDocument]:
+    def _pool_documents(
+        self, path_plans: List[PathPlan], docs_map: dict[tuple[int, int], List[RetrieverDocument]], sample_i: int
+    ) -> List[PooledDocument]:
         pooled_by_key: dict[str, PooledDocument] = {}
         for plan in path_plans:
             docs = docs_map.get((sample_i, plan["path_id"]), [])
@@ -661,48 +603,49 @@ class AdaptiveParallelO1(PromptedGenerationBase):
     def _ns_to_ms(duration_ns: int) -> float:
         return duration_ns / 1_000_000.0
 
-    def _init_batch_runtime(self,
-                            questions: List[str],
-                            max_iterations: int) -> tuple[List[bool], List[ParallelO1Result], List[List[str]]]:
+    def _init_batch_runtime(
+        self, questions: List[str], max_iterations: int
+    ) -> tuple[List[bool], List[ParallelO1Result], List[List[str]]]:
         """Initialize per-sample runtime states for batched execution."""
         completed = [False] * len(questions)
 
-        results: List[ParallelO1Result] = [{
-            "query": q,
-            "max_iterations": max_iterations,
-            "executed_iterations": 0,
-            "navigator_agent_pormpts": [],
-            "navigator_agent_thoughts": [],
-            "search_directions": [],
-            "path_plans": [],
-            "retrieved_docs": [],
-            "pooled_docs": [],
-            "refine_prompts": [],
-            "refined_paths": [],
-            "global_refinements": [],
-            "final_answer": "",
-            "timing": {
-                "phase1_navigator_ms": 0.0,
-                "phase2_path_ms": 0.0,
-                "phase3_retrieval_ms": 0.0,
-                "phase3_pooling_ms": 0.0,
-                "phase4_refine_ms": 0.0,
-                "phase5_synthesize_ms": 0.0,
-                "total_ms": 0.0,
+        results: List[ParallelO1Result] = [
+            {
+                "query": q,
+                "max_iterations": max_iterations,
                 "executed_iterations": 0,
-            },
-        } for q in questions]
+                "navigator_agent_pormpts": [],
+                "navigator_agent_thoughts": [],
+                "search_directions": [],
+                "path_plans": [],
+                "retrieved_docs": [],
+                "pooled_docs": [],
+                "refine_prompts": [],
+                "refined_paths": [],
+                "global_refinements": [],
+                "final_answer": "",
+                "timing": {
+                    "phase1_navigator_ms": 0.0,
+                    "phase2_path_ms": 0.0,
+                    "phase3_retrieval_ms": 0.0,
+                    "phase3_pooling_ms": 0.0,
+                    "phase4_refine_ms": 0.0,
+                    "phase5_synthesize_ms": 0.0,
+                    "total_ms": 0.0,
+                    "executed_iterations": 0,
+                },
+            }
+            for q in questions
+        ]
 
-        # Keep historical global refinements R_<i> for each sample.
+        # Keep historical global refinements  for each sample.
         refinement_histories: List[List[str]] = [[] for _ in questions]
         return completed, results, refinement_histories
 
     def run(self, question: str, max_iterations: int = 4) -> ParallelO1Result:
         return self.run_batch([question], max_iterations=max_iterations)[0]
 
-    def run_batch(self,
-                  questions: List[str],
-                  max_iterations: int = 4) -> List[ParallelO1Result]:
+    def run_batch(self, questions: List[str], max_iterations: int = 4) -> List[ParallelO1Result]:
         # -----------------------------
         # Phase 0: Runtime initialization
         # -----------------------------
@@ -721,19 +664,23 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         iteration_timings: List[Dict[str, Any]] = []
 
         completed, results, refinement_histories = self._init_batch_runtime(
-            questions=questions,
-            max_iterations=max_iterations)
+            questions=questions, max_iterations=max_iterations
+        )
 
         # Static generation configs used in each stage.
-        navigator_agent_config = self._make_config(max_tokens=self.navigator_agent_max_tokens,
-                                                   temperature=self.navigator_agent_temperature,
-                                                   top_p=self.navigator_agent_top_p)
-        path_config = self._make_config(max_tokens=self.path_agent_max_tokens,
-                                        temperature=self.path_agent_temperature,
-                                        top_p=self.path_agent_top_p)
-        global_refine_agent_config = self._make_config(max_tokens=self.global_refine_agent_max_tokens,
-                                                       temperature=self.global_refine_agent_temperature,
-                                                       top_p=self.global_refine_agent_top_p)
+        navigator_agent_config = self._make_config(
+            max_tokens=self.navigator_agent_max_tokens,
+            temperature=self.navigator_agent_temperature,
+            top_p=self.navigator_agent_top_p,
+        )
+        path_config = self._make_config(
+            max_tokens=self.path_agent_max_tokens, temperature=self.path_agent_temperature, top_p=self.path_agent_top_p
+        )
+        global_refine_agent_config = self._make_config(
+            max_tokens=self.global_refine_agent_max_tokens,
+            temperature=self.global_refine_agent_temperature,
+            top_p=self.global_refine_agent_top_p,
+        )
 
         for iteration_idx in range(max_iterations):
             iteration_started_ns = self._now_ns()
@@ -763,15 +710,18 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 self._build_navigator_agent_prompt(
                     question=questions[i],
                     historical_refinements=refinement_histories[i],
-                    use_chat_template=self.navigator_agent_use_chat_template)
+                    use_chat_template=self.navigator_agent_use_chat_template,
+                )
                 for i in active_indices
             ]
             phase1_started_ns = self._now_ns()
-            navigator_agent_outputs = self._generate_text_batch(active_prompts,
-                                                                navigator_agent_config,
-                                                                llm_client=self.navigator_agent_llm_client,
-                                                                tokenizer=self.navigator_agent_tokenizer,
-                                                                use_chat_template=self.navigator_agent_use_chat_template)
+            navigator_agent_outputs = self._generate_text_batch(
+                active_prompts,
+                navigator_agent_config,
+                llm_client=self.navigator_agent_llm_client,
+                tokenizer=self.navigator_agent_tokenizer,
+                use_chat_template=self.navigator_agent_use_chat_template,
+            )
             phase1_ms = self._ns_to_ms(self._now_ns() - phase1_started_ns)
             batch_phase_totals["phase1_navigator_ms"] += phase1_ms
             iteration_timing["phase1_navigator_ms"] = phase1_ms
@@ -782,25 +732,17 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             # Collect path-dispatch inputs from Navigator outputs.
             path_agent_generation_prompts: List[Any] = []
             path_meta: List[tuple[int, int, str, str, str, str]] = []
-            path_plans_by_sample: List[List[PathPlan]] = [
-                [] for _ in range(len(questions))
-            ]
-            directions_by_sample: List[List[SearchDirection]] = [
-                [] for _ in range(len(questions))
-            ]
+            path_plans_by_sample: List[List[PathPlan]] = [[] for _ in range(len(questions))]
+            directions_by_sample: List[List[SearchDirection]] = [[] for _ in range(len(questions))]
 
             for local_i, sample_i in enumerate(active_indices):
                 navigator_agent_output = navigator_agent_outputs[local_i]
                 if not results[sample_i]["navigator_agent_pormpts"]:
-                    results[sample_i]["navigator_agent_pormpts"].append(
-                        self._prompt_to_text(active_prompts[local_i]))
-                results[sample_i]["navigator_agent_pormpts"].append(
-                    navigator_agent_output)
+                    results[sample_i]["navigator_agent_pormpts"].append(self._prompt_to_text(active_prompts[local_i]))
+                results[sample_i]["navigator_agent_pormpts"].append(navigator_agent_output)
                 results[sample_i]["executed_iterations"] += 1
-                navigator_agent_think = self._extract_think(
-                    navigator_agent_output)
-                results[sample_i]["navigator_agent_thoughts"].append(
-                    navigator_agent_think)
+                navigator_agent_think = self._extract_think(navigator_agent_output)
+                results[sample_i]["navigator_agent_thoughts"].append(navigator_agent_think)
 
                 answer = self._parse_answer(navigator_agent_output)
                 if answer:
@@ -808,8 +750,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                     completed[sample_i] = True
                     continue
                 # get search directions
-                directions = self._parse_search_directions(
-                    navigator_agent_output)
+                directions = self._parse_search_directions(navigator_agent_output)
                 results[sample_i]["search_directions"].append(directions)
                 directions_by_sample[sample_i] = directions
                 if not directions:
@@ -821,15 +762,21 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                         original_question=questions[sample_i],
                         navigator_agent_think=navigator_agent_think,
                         direction=direction,
-                        use_chat_template=self.path_agent_use_chat_template)
+                        use_chat_template=self.path_agent_use_chat_template,
+                    )
                     path_agent_generation_prompts.append(path_agent_prompt)
                     path_meta.append(
-                        (sample_i, path_agent_id, direction["direction_id"],
-                         direction["direction"], navigator_agent_think,
-                         self._prompt_to_text(path_agent_prompt)))
+                        (
+                            sample_i,
+                            path_agent_id,
+                            direction["direction_id"],
+                            direction["direction"],
+                            navigator_agent_think,
+                            self._prompt_to_text(path_agent_prompt),
+                        )
+                    )
 
-            iteration_timing["path_prompt_count"] = len(
-                path_agent_generation_prompts)
+            iteration_timing["path_prompt_count"] = len(path_agent_generation_prompts)
 
             if not path_agent_generation_prompts:
                 continue
@@ -838,11 +785,13 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             # Phase 2: Path-agent concretization
             # -----------------------------
             phase2_started_ns = self._now_ns()
-            path_agent_outputs = self._generate_text_batch(path_agent_generation_prompts,
-                                                           path_config,
-                                                           llm_client=self.path_agent_llm_client,
-                                                           tokenizer=self.path_agent_tokenizer,
-                                                           use_chat_template=self.path_agent_use_chat_template)
+            path_agent_outputs = self._generate_text_batch(
+                path_agent_generation_prompts,
+                path_config,
+                llm_client=self.path_agent_llm_client,
+                tokenizer=self.path_agent_tokenizer,
+                use_chat_template=self.path_agent_use_chat_template,
+            )
             phase2_ms = self._ns_to_ms(self._now_ns() - phase2_started_ns)
             batch_phase_totals["phase2_path_ms"] += phase2_ms
             iteration_timing["phase2_path_ms"] = phase2_ms
@@ -858,7 +807,8 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
             for idx, path_agent_output in enumerate(path_agent_outputs):
                 sample_i, path_id, direction_id, direction_text, navigator_agent_think, path_prompt_text = path_meta[
-                    idx]
+                    idx
+                ]
                 path_agent_think = self._extract_think(path_agent_output)
                 path_agent_queries = self._extract_searches(path_agent_output)
                 path_agent_query = path_agent_queries[0] if path_agent_queries else ""
@@ -879,14 +829,12 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
             for sample_i in range(len(questions)):
                 if path_plans_by_sample[sample_i]:
-                    results[sample_i]["path_plans"].append(
-                        path_plans_by_sample[sample_i])
+                    results[sample_i]["path_plans"].append(path_plans_by_sample[sample_i])
 
             if not flat_queries:
                 for sample_i in active_indices:
                     completed[sample_i] = True
-                iteration_timing["iteration_total_ms"] = self._ns_to_ms(
-                    self._now_ns() - iteration_started_ns)
+                iteration_timing["iteration_total_ms"] = self._ns_to_ms(self._now_ns() - iteration_started_ns)
                 iteration_timings.append(iteration_timing)
                 continue
 
@@ -897,15 +845,13 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             # -----------------------------
             phase3_retrieval_started_ns = self._now_ns()
             flat_docs = self.retriever.batch_search(flat_queries)
-            phase3_retrieval_ms = self._ns_to_ms(
-                self._now_ns() - phase3_retrieval_started_ns)
+            phase3_retrieval_ms = self._ns_to_ms(self._now_ns() - phase3_retrieval_started_ns)
             batch_phase_totals["phase3_retrieval_ms"] += phase3_retrieval_ms
             iteration_timing["phase3_retrieval_ms"] = phase3_retrieval_ms
 
             phase3_samples = sorted({sample_i for sample_i, _ in query_meta})
             if phase3_samples:
-                phase3_retrieval_share = phase3_retrieval_ms / \
-                    len(phase3_samples)
+                phase3_retrieval_share = phase3_retrieval_ms / len(phase3_samples)
                 for sample_i in phase3_samples:
                     results[sample_i]["timing"]["phase3_retrieval_ms"] += phase3_retrieval_share
 
@@ -916,15 +862,9 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
             refine_prompts: List[Any] = []
             refine_meta: List[tuple[int, str, List[str], List[str]]] = []
-            refined_paths_by_sample: List[List[RefinedPathResult]] = [
-                [] for _ in range(len(questions))
-            ]
-            pooled_docs_by_sample: List[List[PooledDocument]] = [
-                [] for _ in range(len(questions))
-            ]
-            retrieved_by_sample: List[BatchSearchDocs] = [
-                [] for _ in range(len(questions))
-            ]
+            refined_paths_by_sample: List[List[RefinedPathResult]] = [[] for _ in range(len(questions))]
+            pooled_docs_by_sample: List[List[PooledDocument]] = [[] for _ in range(len(questions))]
+            retrieved_by_sample: List[BatchSearchDocs] = [[] for _ in range(len(questions))]
 
             # Build one global-refine prompt for each active sample.
             phase3_pooling_started_ns = self._now_ns()
@@ -932,33 +872,30 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 sample_path_plans = path_plans_by_sample[sample_i]
                 if not sample_path_plans:
                     continue
-                sample_query_plans = [
-                    plan for plan in sample_path_plans if plan["search_query"]
-                ]
+                sample_query_plans = [plan for plan in sample_path_plans if plan["search_query"]]
                 if not sample_query_plans:
                     continue
 
                 retrieved_by_sample[sample_i] = [
-                    docs_map.get((sample_i, plan["path_id"]), [])
-                    for plan in sample_query_plans
+                    docs_map.get((sample_i, plan["path_id"]), []) for plan in sample_query_plans
                 ]
-                pooled_docs = self._pool_documents(sample_query_plans,
-                                                   docs_map,
-                                                   sample_i)
+                pooled_docs = self._pool_documents(sample_query_plans, docs_map, sample_i)
                 pooled_docs_by_sample[sample_i] = pooled_docs
 
-                refined_paths_by_sample[sample_i] = [{
-                    "path_id": plan["path_id"],
-                    "direction_id": plan["direction_id"],
-                    "direction": plan["direction"],
-                    "think": plan["path_agent_think"],
-                    "search_query": plan["search_query"],
-                    "refined_information": "",
-                    "selected_doc_ids": [
-                        doc["doc_id"] for doc in pooled_docs
-                        if plan["direction_id"] in doc["sources"]
-                    ],
-                } for plan in sample_query_plans]
+                refined_paths_by_sample[sample_i] = [
+                    {
+                        "path_id": plan["path_id"],
+                        "direction_id": plan["direction_id"],
+                        "direction": plan["direction"],
+                        "think": plan["path_agent_think"],
+                        "search_query": plan["search_query"],
+                        "refined_information": "",
+                        "selected_doc_ids": [
+                            doc["doc_id"] for doc in pooled_docs if plan["direction_id"] in doc["sources"]
+                        ],
+                    }
+                    for plan in sample_query_plans
+                ]
 
                 refine_prompt = self._build_global_refine_agent_prompt(
                     question=questions[sample_i],
@@ -969,20 +906,21 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                     use_chat_template=self.global_refine_agent_use_chat_template,
                 )
                 refine_prompts.append(refine_prompt)
-                refine_meta.append((sample_i,
-                                    self._prompt_to_text(refine_prompt),
-                                    [doc["doc_id"] for doc in pooled_docs],
-                                    [plan["direction_id"]
-                                     for plan in sample_query_plans]))
+                refine_meta.append(
+                    (
+                        sample_i,
+                        self._prompt_to_text(refine_prompt),
+                        [doc["doc_id"] for doc in pooled_docs],
+                        [plan["direction_id"] for plan in sample_query_plans],
+                    )
+                )
 
-            phase3_pooling_ms = self._ns_to_ms(self._now_ns() -
-                                               phase3_pooling_started_ns)
+            phase3_pooling_ms = self._ns_to_ms(self._now_ns() - phase3_pooling_started_ns)
             batch_phase_totals["phase3_pooling_ms"] += phase3_pooling_ms
             iteration_timing["phase3_pooling_ms"] = phase3_pooling_ms
             phase3_pooling_samples = [meta[0] for meta in refine_meta]
             if phase3_pooling_samples:
-                phase3_pooling_share = phase3_pooling_ms / \
-                    len(phase3_pooling_samples)
+                phase3_pooling_share = phase3_pooling_ms / len(phase3_pooling_samples)
                 for sample_i in phase3_pooling_samples:
                     results[sample_i]["timing"]["phase3_pooling_ms"] += phase3_pooling_share
 
@@ -992,11 +930,13 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             # Phase 4: Global refinement and context update
             # -----------------------------
             phase4_started_ns = self._now_ns()
-            refine_agent_outputs = self._generate_text_batch(refine_prompts,
-                                                             global_refine_agent_config,
-                                                             llm_client=self.global_refine_agent_llm_client,
-                                                             tokenizer=self.global_refine_agent_tokenizer,
-                                                             use_chat_template=self.global_refine_agent_use_chat_template)
+            refine_agent_outputs = self._generate_text_batch(
+                refine_prompts,
+                global_refine_agent_config,
+                llm_client=self.global_refine_agent_llm_client,
+                tokenizer=self.global_refine_agent_tokenizer,
+                use_chat_template=self.global_refine_agent_use_chat_template,
+            )
             phase4_ms = self._ns_to_ms(self._now_ns() - phase4_started_ns)
             batch_phase_totals["phase4_refine_ms"] += phase4_ms
             iteration_timing["phase4_refine_ms"] = phase4_ms
@@ -1008,26 +948,21 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
             for idx, refine_agent_output in enumerate(refine_agent_outputs):
                 sample_i, refine_prompt_text, _, _ = refine_meta[idx]
-                results[sample_i]["refine_prompts"].append(
-                    [refine_prompt_text])
-                results[sample_i]["global_refinements"].append(
-                    refine_agent_output)
-                results[sample_i]["refined_paths"].append(
-                    refined_paths_by_sample[sample_i])
-                results[sample_i]["retrieved_docs"].append(
-                    retrieved_by_sample[sample_i])
-                results[sample_i]["pooled_docs"].append(
-                    pooled_docs_by_sample[sample_i])
+                results[sample_i]["refine_prompts"].append([refine_prompt_text])
+                results[sample_i]["global_refinements"].append(refine_agent_output)
+                results[sample_i]["refined_paths"].append(refined_paths_by_sample[sample_i])
+                results[sample_i]["retrieved_docs"].append(retrieved_by_sample[sample_i])
+                results[sample_i]["pooled_docs"].append(pooled_docs_by_sample[sample_i])
                 refinement_histories[sample_i].append(refine_agent_output)
                 results[sample_i]["navigator_agent_pormpts"].append(
-                    self._build_refinement_appendix(refine_agent_output))
+                    self._build_refinement_appendix(refine_agent_output)
+                )
 
             for sample_i in active_indices:
                 if not pooled_docs_by_sample[sample_i] and not completed[sample_i]:
                     completed[sample_i] = True
 
-            iteration_timing["iteration_total_ms"] = self._ns_to_ms(
-                self._now_ns() - iteration_started_ns)
+            iteration_timing["iteration_total_ms"] = self._ns_to_ms(self._now_ns() - iteration_started_ns)
             iteration_timings.append(iteration_timing)
 
         # -----------------------------
@@ -1040,19 +975,22 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             final_prompt = self._build_final_answer_prompt(
                 question=questions[idx],
                 historical_refinements=refinement_histories[idx],
-                use_chat_template=self.navigator_agent_use_chat_template)
+                use_chat_template=self.navigator_agent_use_chat_template,
+            )
             if not result["navigator_agent_pormpts"]:
-                result["navigator_agent_pormpts"].append(
-                    self._prompt_to_text(final_prompt))
+                result["navigator_agent_pormpts"].append(self._prompt_to_text(final_prompt))
             phase5_started_ns = self._now_ns()
             final_outputs = self._generate_text_batch(
                 [final_prompt],
-                self._make_config(max_tokens=self.synthesize_max_tokens,
-                                  temperature=self.synthesize_temperature,
-                                  top_p=self.synthesize_top_p),
+                self._make_config(
+                    max_tokens=self.synthesize_max_tokens,
+                    temperature=self.synthesize_temperature,
+                    top_p=self.synthesize_top_p,
+                ),
                 llm_client=self.navigator_agent_llm_client,
                 tokenizer=self.navigator_agent_tokenizer,
-                use_chat_template=self.navigator_agent_use_chat_template)
+                use_chat_template=self.navigator_agent_use_chat_template,
+            )
             phase5_ms = self._ns_to_ms(self._now_ns() - phase5_started_ns)
             batch_phase_totals["phase5_synthesize_ms"] += phase5_ms
             results[idx]["timing"]["phase5_synthesize_ms"] += phase5_ms
