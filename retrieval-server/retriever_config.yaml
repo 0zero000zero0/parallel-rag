@@ -1,0 +1,8 @@
+gpu_id: "0,1"
+retrieval_method: "dense"
+retrieval_model_path: "/mnt1/zhangdingwen/open_source/models/e5-base-v2"
+index_path: "/mnt1/zhangdingwen/llm/datasets/retrieval-corpus/e5_flat_inner.index"
+corpus_path: "/mnt1/zhangdingwen/llm/datasets/retrieval-corpus/wiki18_100w.jsonl"
+retrieval_topk: 5
+retrieval_batch_size: 256
+faiss_gpu: True

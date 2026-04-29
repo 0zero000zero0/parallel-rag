@@ -1,7 +1,7 @@
 __pycache__/
 .vscode/
 outputs/
-retrieval-server/
+retrieval-server/output/
 Search-o1/
 tmp/
 */__pycache__/
