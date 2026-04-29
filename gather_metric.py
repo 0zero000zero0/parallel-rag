@@ -16,13 +16,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--method",
         type=str,
-        required=True,
+        default="adaptive-parallel-o1",
         help="Method name under outputs, e.g. parallel-rag",
     )
     parser.add_argument(
         "--model",
         type=str,
-        required=True,
+        default="Qwen3-32B",
         help="Model name under outputs/<method>, e.g. Qwen3-32B",
     )
     parser.add_argument(
@@ -70,7 +70,6 @@ def collect_metrics(method_model_dir: Path) -> List[Dict[str, Any]]:
             row: Dict[str, Any] = {
                 "dataset": dataset_dir.name,
                 "index": index_dir.name,
-                "metrics_file": str(metrics_file),
             }
             row.update(metrics)
             rows.append(row)
@@ -92,17 +91,21 @@ def main() -> None:
 
     df = pd.DataFrame(rows)
 
-    preferred_front = ["dataset", "index", "metrics_file"]
+    preferred_front = ["dataset"]
     other_cols = [c for c in df.columns if c not in preferred_front]
     df = df[preferred_front + other_cols]
     df = df.sort_values(by=["dataset", "index"],
                         kind="stable").reset_index(drop=True)
 
     saved_files: List[Path] = []
+    group: pd.DataFrame
     for index_name, group in df.groupby("index", sort=False):
         tmp_xlsx_path = method_model_dir / f"{index_name}.xlsx"
-        group.to_excel(tmp_xlsx_path, index=False)
+        group.to_excel(tmp_xlsx_path, index=False, float_format="%.4f")
         saved_files.append(tmp_xlsx_path)
+        # tmp_csv_path = method_model_dir / f"{index_name}.csv"
+        # group.to_csv(tmp_csv_path, index=False, sep="\t")
+        # saved_files.append(tmp_csv_path)
 
     print(f"Method/Model dir: {method_model_dir}")
     print(f"Rows aggregated: {len(df)}")

@@ -64,7 +64,7 @@ for DATASET in "${DATASETS[@]}"; do
     --navigator_agent_model "$NAVIGATOR_AGENT_MODEL" \
     --navigator_agent_model_path "$NAVIGATOR_AGENT_MODEL_PATH" \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 1.0 \
+    --navigator_agent_temperature 0.6 \
     --navigator_agent_top_p 0.9 \
     --navigator_agent_use_chat_template \
     --global_refine_agent_openai_base_url "$GLOBAL_REFINE_AGENT_OPENAI_BASE_URL" \
@@ -72,11 +72,11 @@ for DATASET in "${DATASETS[@]}"; do
     --global_refine_agent_model "$GLOBAL_REFINE_AGENT_MODEL" \
     --global_refine_agent_model_path "$GLOBAL_REFINE_AGENT_MODEL_PATH" \
     --global_refine_agent_max_tokens 1024 \
-    --global_refine_agent_temperature 1.0 \
+    --global_refine_agent_temperature 0.6 \
     --global_refine_agent_top_p 0.9 \
     --global_refine_agent_use_chat_template \
     --synthesize_max_tokens 1024 \
-    --synthesize_temperature 1.0 \
+    --synthesize_temperature 0.6 \
     --synthesize_top_p 0.9 \
     --max_iterations 5 \
     --num_samples "$NUM_SAMPLES"
