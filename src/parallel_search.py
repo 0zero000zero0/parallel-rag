@@ -411,6 +411,7 @@ class ParallelSearch(PromptedGenerationBase):
             batch_phase_totals["phase1_navigator_ms"] += phase1_ms
             iteration_timing["phase1_navigator_ms"] = phase1_ms
             phase1_share = phase1_ms / len(active_indices)
+
             for sample_i in active_indices:
                 results[sample_i]["timing"]["phase1_navigator_ms"] += phase1_share
 

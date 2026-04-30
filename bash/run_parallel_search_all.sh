@@ -9,8 +9,17 @@ NAVIGATOR_AGENT_OPENAI_API_KEY="TEST"
 NAVIGATOR_AGENT_MODEL="Qwen3-32B"
 NAVIGATOR_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
 
+
+TEMPERATURE=0.8
+TOP_P=0.8
+
 NUM_SAMPLES=1024
 DATASETS=(
+  bamboogle
+  2wikimultihopqa
+  hotpotqa
+  musique
+  gpqa
   nq
   popqa
   triviaqa
@@ -53,12 +62,12 @@ for DATASET in "${DATASETS[@]}"; do
     --navigator_agent_model "$NAVIGATOR_AGENT_MODEL" \
     --navigator_agent_model_path "$NAVIGATOR_AGENT_MODEL_PATH" \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.6 \
-    --navigator_agent_top_p 0.9 \
+    --navigator_agent_temperature ${TEMPERATURE} \
+    --navigator_agent_top_p ${TOP_P} \
     --navigator_agent_use_chat_template \
     --synthesize_max_tokens 1024 \
-    --synthesize_temperature 0.6 \
-    --synthesize_top_p 0.9 \
+    --synthesize_temperature ${TEMPERATURE} \
+    --synthesize_top_p ${TOP_P} \
     --max_iterations 5 \
     --num_samples "$NUM_SAMPLES"
 
