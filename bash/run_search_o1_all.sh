@@ -62,7 +62,6 @@ for dataset in "${DATASETS[@]}"; do
     --openai_api_key "$OPENAI_API_KEY" \
     --model "$MODEL" \
     --max_search_limit 5 \
-    --docs_per_query 5 \
     --search_max_tokens 512 \
     --search_temperature 0.8 \
     --search_top_p 0.9 \

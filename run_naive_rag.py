@@ -34,7 +34,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--use_chat_template", action="store_true",
                         help="Render chat messages via tokenizer.apply_chat_template before /v1/completions")
 
-    parser.add_argument("--docs_per_query", type=int, default=5)
     parser.add_argument("--generation_max_tokens", type=int, default=1024)
     parser.add_argument("--generation_temperature", type=float, default=0.7)
     parser.add_argument("--generation_top_p", type=float, default=0.9)

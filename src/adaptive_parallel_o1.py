@@ -145,7 +145,6 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         navigator_agent_llm_client: OpenAIClient,
         global_refine_agent_llm_client: OpenAIClient,
         path_agent_llm_client: OpenAIClient,
-        docs_per_query: int = 3,
         navigator_agent_max_tokens: int = 512,
         navigator_agent_temperature: float = 0.6,
         navigator_agent_top_p: float = 0.9,
@@ -182,7 +181,6 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         self.navigator_agent_llm_client = navigator_agent_llm_client
         self.global_refine_agent_llm_client = global_refine_agent_llm_client
         self.path_agent_llm_client = path_agent_llm_client
-        self.docs_per_query = max(1, docs_per_query)
         self.navigator_agent_max_tokens = navigator_agent_max_tokens
         self.navigator_agent_temperature = navigator_agent_temperature
         self.navigator_agent_top_p = navigator_agent_top_p
@@ -392,7 +390,6 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             use_chat_template=path_agent_use_chat_template,
         )
 
-        docs_per_query = int(getattr(args, "docs_per_query", 3))
 
         navigator_agent_max_tokens = int(
             getattr(args, "navigator_agent_max_tokens", 256)
@@ -434,7 +431,6 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             navigator_agent_llm_client=navigator_agent_llm_client,
             global_refine_agent_llm_client=global_refine_agent_llm_client,
             path_agent_llm_client=path_agent_llm_client,
-            docs_per_query=docs_per_query,
             navigator_agent_max_tokens=navigator_agent_max_tokens,
             navigator_agent_temperature=navigator_agent_temperature,
             navigator_agent_top_p=navigator_agent_top_p,

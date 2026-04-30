@@ -22,7 +22,6 @@ python run_adaptive_parallel_o1.py \
   --navigator_agent_openai_base_url "$NAVIGATOR_AGENT_OPENAI_BASE_URL" \
   --navigator_agent_openai_api_key "$NAVIGATOR_AGENT_OPENAI_API_KEY" \
   --navigator_agent_model "$MODEL" \
-  --docs_per_query 5 \
   --navigator_agent_max_tokens 1024 \
   --navigator_agent_temperature 0.8 \
   --navigator_agent_top_p 0.9 \

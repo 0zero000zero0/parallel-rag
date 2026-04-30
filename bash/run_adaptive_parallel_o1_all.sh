@@ -19,14 +19,16 @@ PATH_AGENT_OPENAI_API_KEY="TEST"
 PATH_AGENT_MODEL="Qwen3-32B"
 PATH_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
 
+TEMPERATURE=0.8
+TOP_P=0.8
 
 NUM_SAMPLES=2048
 DATASETS=(
-  bamboogle
-  2wikimultihopqa
-  hotpotqa
-  musique
-  gpqa
+  # bamboogle
+  # 2wikimultihopqa
+  # hotpotqa
+  # musique
+  # gpqa
   nq
   popqa
   triviaqa
@@ -66,14 +68,13 @@ for dataset in "${DATASETS[@]}"; do
     --batch_size 512 \
     --retriever_base_url "$RETRIEVER_BASE_URL" \
     --retriever_top_k 5 \
-    --docs_per_query 5 \
     --navigator_agent_openai_base_url "$NAVIGATOR_AGENT_OPENAI_BASE_URL" \
     --navigator_agent_openai_api_key "$NAVIGATOR_AGENT_OPENAI_API_KEY" \
     --navigator_agent_model "$NAVIGATOR_AGENT_MODEL" \
     --navigator_agent_model_path "$NAVIGATOR_AGENT_MODEL_PATH" \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.7 \
-    --navigator_agent_top_p 0.8 \
+    --navigator_agent_temperature ${TEMPERATURE} \
+    --navigator_agent_top_p ${TOP_P} \
     --navigator_agent_use_chat_template \
     --navigator_agent_enable_thinking \
     --global_refine_agent_openai_base_url "$GLOBAL_REFINE_AGENT_OPENAI_BASE_URL" \
@@ -81,8 +82,8 @@ for dataset in "${DATASETS[@]}"; do
     --global_refine_agent_model "$GLOBAL_REFINE_AGENT_MODEL" \
     --global_refine_agent_model_path "$GLOBAL_REFINE_AGENT_MODEL_PATH" \
     --global_refine_agent_max_tokens 1024 \
-    --global_refine_agent_temperature 0.7 \
-    --global_refine_agent_top_p 0.8 \
+    --global_refine_agent_temperature ${TEMPERATURE} \
+    --global_refine_agent_top_p ${TOP_P} \
     --global_refine_agent_use_chat_template \
     --global_refine_agent_enable_thinking \
     --path_agent_openai_base_url "$PATH_AGENT_OPENAI_BASE_URL" \
@@ -90,8 +91,8 @@ for dataset in "${DATASETS[@]}"; do
     --path_agent_model "$PATH_AGENT_MODEL" \
     --path_agent_model_path "$PATH_AGENT_MODEL_PATH" \
     --path_agent_max_tokens 1024 \
-    --path_agent_temperature 0.7 \
-    --path_agent_top_p 0.8 \
+    --path_agent_temperature ${TEMPERATURE} \
+    --path_agent_top_p ${TOP_P} \
     --path_agent_use_chat_template \
     --path_agent_enable_thinking \
     --max_iterations 5 \

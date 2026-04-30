@@ -56,7 +56,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument("--num_parallel", type=int, default=3)
-    parser.add_argument("--docs_per_query", type=int, default=5)
 
     parser.add_argument("--trigger_max_tokens", type=int, default=256)
     parser.add_argument("--trigger_temperature", type=float, default=0.6)

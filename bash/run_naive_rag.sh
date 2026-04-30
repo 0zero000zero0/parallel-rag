@@ -20,7 +20,6 @@ python run_naive_rag.py \
   --openai_base_url "$OPENAI_BASE_URL" \
   --openai_api_key "$OPENAI_API_KEY" \
   --model "$MODEL" \
-  --docs_per_query 5 \
   --generation_max_tokens 1024 \
   --generation_temperature 0.8 \
   --generation_top_p 0.9 \

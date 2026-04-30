@@ -37,7 +37,6 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Render chat messages via tokenizer.apply_chat_template before /v1/completions")
 
     parser.add_argument("--max_search_limit", type=int, default=5)
-    parser.add_argument("--docs_per_query", type=int, default=5)
 
     parser.add_argument("--search_max_tokens", type=int, default=512)
     parser.add_argument("--search_temperature", type=float, default=1.0)
@@ -193,7 +192,7 @@ def main() -> None:
         },
         "batch_timings": batch_timings,
     }
-    
+
     timing_output_path = output_dir / "time.json"
     with timing_output_path.open("w", encoding="utf-8") as f:
         json.dump(timing_summary, f, ensure_ascii=False, indent=0)

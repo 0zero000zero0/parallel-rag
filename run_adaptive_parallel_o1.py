@@ -162,7 +162,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Whether path agent enables thinking mode; default inherits navigator_agent_enable_thinking",
     )
 
-    parser.add_argument("--docs_per_query", type=int, default=5)
 
     parser.add_argument("--navigator_agent_max_tokens", type=int, default=256)
     parser.add_argument("--navigator_agent_temperature", type=float, default=0.6)
@@ -219,17 +218,11 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     input_file_path = Path(args.input_file)
-    output_model_name = (
-        args.navigator_agent_model
-        or args.global_refine_agent_model
-        or args.shared_model
-        or args.model
-        or "Qwen3-14B"
-    )
+
     output_dir = build_output_dir(
         input_file_path,
         method_name="adaptive-parallel-o1",
-        model_name=output_model_name,
+        model_name=args.navigator_agent_model,
         top_dir=args.output_top_dir,
     )
     dataset_name = input_file_path.parent.name

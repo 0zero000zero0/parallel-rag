@@ -72,7 +72,6 @@ def build_parser() -> argparse.ArgumentParser:
                         default=None,
                         help="Whether global refine agent should use chat template; default inherits navigator_agent_use_chat_template")
 
-    parser.add_argument("--docs_per_query", type=int, default=5)
 
     parser.add_argument("--navigator_agent_max_tokens", type=int, default=256)
     parser.add_argument("--navigator_agent_temperature",
