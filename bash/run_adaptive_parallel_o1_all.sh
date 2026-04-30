@@ -20,13 +20,13 @@ PATH_AGENT_MODEL="Qwen3-32B"
 PATH_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
 
 
-NUM_SAMPLES=1024
+NUM_SAMPLES=2048
 DATASETS=(
-  # bamboogle
-  # 2wikimultihopqa
-  # hotpotqa
-  # musique
-  # gpqa
+  bamboogle
+  2wikimultihopqa
+  hotpotqa
+  musique
+  gpqa
   nq
   popqa
   triviaqa
