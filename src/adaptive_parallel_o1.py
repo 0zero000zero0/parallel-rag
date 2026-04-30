@@ -60,22 +60,28 @@ class SearchDirection(TypedDict):
     direction: str
 
 
-class PathPlan(TypedDict):
+class AgentAnswerRecord(TypedDict):
     prompt: str
+    output: str
+    answer: str
+
+
+class PathAgentCoreRecord(TypedDict):
     path_id: int
     direction_id: str
     direction: str
+    search_query: str
+
+
+class PathAgentIterationRecord(PathAgentCoreRecord):
+    prompt: str
     navigator_agent_think: str
     path_agent_think: str
-    search_query: str
+    path_agent_output: str
 
 
-class RefinedPathResult(TypedDict):
-    path_id: int
-    direction_id: str
-    direction: str
+class RefinedPathResult(PathAgentCoreRecord):
     think: str
-    search_query: str
     refined_information: str
     selected_doc_ids: List[str]
 
@@ -88,37 +94,20 @@ class PooledDocument(TypedDict):
     source_queries: List[str]
 
 
-class NavigatorIterationRecord(TypedDict):
-    prompt: str
-    output: str
+class NavigatorIterationRecord(AgentAnswerRecord):
     think: str
-    answer: str
     search_directions: List[SearchDirection]
-
-
-class PathAgentIterationRecord(TypedDict):
-    prompt: str
-    output: str
-    path_id: int
-    direction_id: str
-    direction: str
-    navigator_agent_think: str
-    path_agent_think: str
-    search_query: str
 
 
 class GlobalRefineIterationRecord(TypedDict):
     prompt: str
-    output: str
-    retrieved_docs: BatchSearchDocs
+    refine_agent_output: str
     pooled_docs: List[PooledDocument]
     refined_paths: List[RefinedPathResult]
 
 
-class FinalSynthesisRecord(TypedDict):
-    prompt: str
-    output: str
-    answer: str
+class FinalSynthesisRecord(AgentAnswerRecord):
+    pass
 
 
 class IterationRecord(TypedDict, total=False):
@@ -390,7 +379,6 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             use_chat_template=path_agent_use_chat_template,
         )
 
-
         navigator_agent_max_tokens = int(
             getattr(args, "navigator_agent_max_tokens", 256)
         )
@@ -613,7 +601,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         question: str,
         navigator_agent_think: str,
         directions: List[SearchDirection],
-        path_plans: List[PathPlan],
+        path_plans: List[PathAgentIterationRecord],
         pooled_docs: List[PooledDocument],
         use_chat_template: bool,
     ) -> Any:
@@ -660,31 +648,35 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
         system_prompt = (
             "You are the Global Refine Agent.\n"
-            "You are tasked with reading and analyzing document pool based on the following inputs: the original question, this round's direction set, the concrete queries used by the Path Agents, and a global document pool with provenance metadata.\n"
-            "Your objective is to extract relevant and helpful information for Current Search Query from the Searched document pool and seamlessly integrate this information into the Previous Reasoning Steps to continue reasoning for the original question.  Guidelines:\n"
-            "1. Analyze the Searched document pool:\n"
+            "You are tasked with reading and analyzing document pool based on the following inputs: the original question, the reasoning steps by navigator agent, abstract search directions, concrete search queries, and a global document pool with provenance metadata.\n"
+            "Your objective is to extract relevant and helpful information for concrete search queries from the searched document pool and seamlessly integrate this information into the navigator agent's Reasoning steps to continue reasoning for the original question.  Guidelines:\n"
+            "1. Analyze the searched document pool:\n"
             "  - Carefully review the content of each searched web page.\n"
-            "  - Identify factual information that is relevant to the Current Search Query and can aid in the reasoning process for the original question.\n"
+            "  - Identify factual information that is relevant to  concrete search queries and can aid in the reasoning process for the original question.\n"
             "2. Extract Relevant Information:\n"
-            "  - Select the information from the Searched document pool that  directly contributes to advancing the Previous Reasoning  Steps.\n"
+            "  - Select the information from the Searched document pool that directly contributes to advancing the navigator agent's reasoning steps.\n"
             "  - Ensure that the extracted information is accurate and relevant.\n"
             "3. Output Format: "
-            "  - If the document pool provide helpful information for current search query: Present the information beginning with `Helpful Information` as shown below.\n"
+            "  - If the document pool provide ALL THE helpful information for concrete search queries: Present the information beginning with `Helpful Information` as shown below.\n"
             "Helpful Information: [Helpful information here]\n"
-            "  - If the document pool do not provide any helpful information for current search query: Output the following text.\n"
-            "No helpful information found.\n\n"
-            "Inputs:"
+            "  - If the document pool do not provide any helpful information for concrete search queries: Output the following text.\n"
+            "No helpful information found.\n"
+            "Now the inputs information as follows:"
         )
         user_prompt = "\n\n".join(
             [
                 self._format_external_context("Original Question", question),
                 self._format_external_context(
-                    "Previous Navigator Agent Thinking", navigator_agent_think
+                    "Previous Navigator Agent Reasoning step", navigator_agent_think
                 ),
-                self._format_external_context("Search Directions", direction_block),
+                self._format_external_context(
+                    "Abstract Search Directions", direction_block
+                ),
                 self._format_external_context("Concrete Search Queries", query_block),
-                self._format_external_context("Global Document Pool", docs_block),
-                "Now you should analyze each web page and find  helpful information based on the original question, this round's direction set, the concrete queries, and a global document pool with provenance metadata.",
+                self._format_external_context(
+                    "Global Searched Document Pool", docs_block
+                ),
+                "Now you should analyze each searched document and find ALL THE helpful information based on the original question, abstract search directions, concrete queries, and a global searched document pool with provenance metadata.",
             ]
         )
         return self._format_prompt_by_template(
@@ -733,7 +725,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
     def _pool_documents(
         self,
-        path_plans: List[PathPlan],
+        path_plans: List[PathAgentIterationRecord],
         docs_map: dict[tuple[int, int], List[RetrieverDocument]],
         sample_i: int,
     ) -> List[PooledDocument]:
@@ -906,7 +898,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             # Collect path-dispatch inputs from Navigator outputs.
             path_agent_generation_prompts: List[Any] = []
             path_meta: List[tuple[int, int, str, str, str, str]] = []
-            path_plans_by_sample: List[List[PathPlan]] = [
+            path_plans_by_sample: List[List[PathAgentIterationRecord]] = [
                 [] for _ in range(len(questions))
             ]
             path_records_by_sample: List[List[PathAgentIterationRecord]] = [
@@ -949,7 +941,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 # get search directions
                 directions_by_sample[sample_i] = directions
                 if not directions:
-                    completed[sample_i] = True
+                    # completed[sample_i] = True
                     continue
                 # preparing for path agents
                 for path_agent_id, direction in enumerate(directions, start=1):
@@ -1013,9 +1005,10 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 path_agent_think = self._extract_think(path_agent_output)
                 path_agent_queries = self._extract_searches(path_agent_output)
                 path_agent_query = path_agent_queries[0] if path_agent_queries else ""
+
                 path_record: PathAgentIterationRecord = {
                     "prompt": path_prompt_text,
-                    "output": path_agent_output,
+                    "path_agent_output": path_agent_output,
                     "path_id": path_id,
                     "direction_id": direction_id,
                     "direction": direction_text,
@@ -1024,8 +1017,10 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                     "search_query": path_agent_query,
                 }
                 path_records_by_sample[sample_i].append(path_record)
-                path_plan: PathPlan = {
+
+                path_plan: PathAgentIterationRecord = {
                     "prompt": path_prompt_text,
+                    "path_agent_output": path_agent_output,
                     "path_id": path_id,
                     "direction_id": direction_id,
                     "direction": direction_text,
@@ -1168,7 +1163,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             iteration_timing["refine_prompt_count"] = len(refine_prompts)
 
             # -----------------------------
-            # Phase 4: Global refinement and context update
+            # Phase 4: Global refine and context update
             # -----------------------------
             phase4_started_ns = self._now_ns()
             refine_agent_outputs = self._generate_text_batch(
@@ -1196,17 +1191,16 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                     )
                     global_refine_record: GlobalRefineIterationRecord = {
                         "prompt": refine_prompt_text,
-                        "output": refine_agent_output,
-                        "retrieved_docs": retrieved_by_sample[sample_i],
+                        "refine_agent_output": refine_agent_output,
                         "pooled_docs": pooled_docs_by_sample[sample_i],
                         "refined_paths": refined_paths_by_sample[sample_i],
                     }
                     iteration_record["global_refine"] = global_refine_record
                 refinement_histories[sample_i].append(refine_agent_output)
 
-            for sample_i in active_indices:
-                if not pooled_docs_by_sample[sample_i] and not completed[sample_i]:
-                    completed[sample_i] = True
+            # for sample_i in active_indices:
+            #     if not pooled_docs_by_sample[sample_i] and not completed[sample_i]:
+            #         completed[sample_i] = True
 
             iteration_timing["iteration_total_ms"] = self._ns_to_ms(
                 self._now_ns() - iteration_started_ns
