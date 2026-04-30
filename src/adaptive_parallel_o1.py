@@ -128,10 +128,13 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         stop_tokens: List[str] | None = None,
         navigator_agent_use_chat_template: bool = False,
         navigator_agent_tokenizer: Any = None,
+        navigator_agent_enable_thinking: bool = False,
         global_refine_agent_use_chat_template: bool = False,
         global_refine_agent_tokenizer: Any = None,
+        global_refine_agent_enable_thinking: bool = False,
         path_agent_use_chat_template: bool = False,
         path_tokenizer: Any = None,
+        path_agent_enable_thinking: bool = False,
     ):
         super().__init__(
             llm_client=navigator_agent_llm_client,
@@ -161,12 +164,15 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         self.synthesize_top_p = synthesize_top_p
         self.navigator_agent_use_chat_template = navigator_agent_use_chat_template
         self.navigator_agent_tokenizer = navigator_agent_tokenizer
+        self.navigator_agent_enable_thinking = navigator_agent_enable_thinking
         self.global_refine_agent_use_chat_template = (
             global_refine_agent_use_chat_template
         )
         self.global_refine_agent_tokenizer = global_refine_agent_tokenizer
+        self.global_refine_agent_enable_thinking = global_refine_agent_enable_thinking
         self.path_agent_use_chat_template = path_agent_use_chat_template
         self.path_agent_tokenizer = path_tokenizer
+        self.path_agent_enable_thinking = path_agent_enable_thinking
 
         if (
             self.global_refine_agent_use_chat_template
@@ -192,6 +198,14 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             ),
             default=False,
         )
+        navigator_agent_enable_thinking = _coerce_bool(
+            _first_not_none(
+                getattr(args, "navigator_agent_enable_thinking", None),
+                getattr(args, "shared_enable_thinking", None),
+                getattr(args, "enable_thinking", None),
+            ),
+            default=False,
+        )
         global_refine_agent_use_chat_template_raw = getattr(
             args, "global_refine_agent_use_chat_template", None
         )
@@ -199,11 +213,25 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             global_refine_agent_use_chat_template_raw,
             default=navigator_agent_use_chat_template,
         )
+        global_refine_agent_enable_thinking_raw = getattr(
+            args, "global_refine_agent_enable_thinking", None
+        )
+        global_refine_agent_enable_thinking = _coerce_bool(
+            global_refine_agent_enable_thinking_raw,
+            default=navigator_agent_enable_thinking,
+        )
         path_agent_use_chat_template_raw = getattr(
             args, "path_agent_use_chat_template", None
         )
         path_agent_use_chat_template = _coerce_bool(
             path_agent_use_chat_template_raw, default=navigator_agent_use_chat_template
+        )
+        path_agent_enable_thinking_raw = getattr(
+            args, "path_agent_enable_thinking", None
+        )
+        path_agent_enable_thinking = _coerce_bool(
+            path_agent_enable_thinking_raw,
+            default=navigator_agent_enable_thinking,
         )
 
         navigator_agent_model = _first_not_none(
@@ -389,10 +417,13 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             stop_tokens=parse_stop_tokens(args),
             navigator_agent_use_chat_template=navigator_agent_use_chat_template,
             navigator_agent_tokenizer=navigator_agent_tokenizer,
+            navigator_agent_enable_thinking=navigator_agent_enable_thinking,
             global_refine_agent_use_chat_template=global_refine_agent_use_chat_template,
             global_refine_agent_tokenizer=global_refine_agent_tokenizer,
+            global_refine_agent_enable_thinking=global_refine_agent_enable_thinking,
             path_agent_use_chat_template=path_agent_use_chat_template,
             path_tokenizer=path_tokenizer,
+            path_agent_enable_thinking=path_agent_enable_thinking,
         )
 
     def _make_config(
@@ -430,6 +461,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         llm_client: OpenAIClient,
         tokenizer: Any = None,
         use_chat_template: bool | None = None,
+        enable_thinking: bool = False,
     ) -> List[str]:
         if not prompts:
             return []
@@ -445,7 +477,11 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             return llm_client.generate_text(prompt_texts, config, self.stop_tokens)
 
         return llm_client.generate_text(
-            prompts, config, self.stop_tokens, tokenizer=tokenizer
+            prompts,
+            config,
+            self.stop_tokens,
+            tokenizer=tokenizer,
+            enable_thinking=enable_thinking,
         )
 
     def _extract_think(self, text: str) -> str:
@@ -495,7 +531,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             "If you lack of some external informatioin, you can output a dynamic set of abstract retrieval directions inside <search_directions>...</search_directions>. "
             'Each direction must be wrapped in <direction id="k">...</direction>. '
             "And the system will return relative information inside <information>...</information>. "
-            "Each direction should explicitly describe the entity, relation, attribute, and the information gap that needs to be filled. "
+            # "Each direction should explicitly describe the entity, relation, attribute, and the information gap that needs to be filled. "
             "You may produce as many directions as needed for this round."
         )
         user_prompt = "\n\n".join(
@@ -519,11 +555,12 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         use_chat_template: bool,
     ) -> Any:
         system_prompt = (
-            "You are a helpful assistant that help navigator_agent Agent to answer user's question. "
-            "You will receive the original question, the navigator_agent Agent's current  thoughts, and one assigned retrieval direction by navigator_agent Agent. "
+            "You are a helpful assistant that help Navigator Agent to answer user's question. "
+            "You will receive the original question, the Navigator Agent's current thoughts, and one assigned retrieval direction by Navigator Agent. "
             "Your task is to convert the abstract retrieval direction into one concrete search-engine-friendly query. "
             "You must reason locally inside <think>...</think> and then output exactly one search query inside <search>...</search>. "
-            "The query should be precise, operational, and directly aligned with the assigned direction."
+            # "The query should be precise, operational, and directly aligned with the assigned direction."
+            "The Inputs:"
         )
         user_prompt = "\n\n".join(
             [
@@ -535,7 +572,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                     f"Assigned Direction {direction['direction_id']}",
                     direction["direction"],
                 ),
-                "Now think about above information and put your search query in <search>...</search>",
+                "Now think and put your search query in <search>...</search>",
             ]
         )
         return self._format_prompt_by_template(
@@ -604,9 +641,9 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             "  - Ensure that the extracted information is accurate and relevant.\n"
             "3. Output Format: "
             "  - If the document pool provide helpful information for current search query: Present the information beginning with `Helpful Information` as shown below.\n"
-            "Helpful Information[Helpful information here]\n"
+            "Helpful Information: [Helpful information here]\n"
             "  - If the document pool do not provide any helpful information for current search query: Output the following text.\n"
-            "Final Information No helpful information found.\n\n"
+            "No helpful information found.\n\n"
             "Inputs:"
         )
         user_prompt = "\n\n".join(
@@ -830,6 +867,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 llm_client=self.navigator_agent_llm_client,
                 tokenizer=self.navigator_agent_tokenizer,
                 use_chat_template=self.navigator_agent_use_chat_template,
+                enable_thinking=self.navigator_agent_enable_thinking,
             )
             phase1_ms = self._ns_to_ms(self._now_ns() - phase1_started_ns)
             batch_phase_totals["phase1_navigator_ms"] += phase1_ms
@@ -910,6 +948,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 llm_client=self.path_agent_llm_client,
                 tokenizer=self.path_agent_tokenizer,
                 use_chat_template=self.path_agent_use_chat_template,
+                enable_thinking=self.path_agent_enable_thinking,
             )
             phase2_ms = self._ns_to_ms(self._now_ns() - phase2_started_ns)
             batch_phase_totals["phase2_path_ms"] += phase2_ms
@@ -1087,6 +1126,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 llm_client=self.global_refine_agent_llm_client,
                 tokenizer=self.global_refine_agent_tokenizer,
                 use_chat_template=self.global_refine_agent_use_chat_template,
+                enable_thinking=self.global_refine_agent_enable_thinking,
             )
             phase4_ms = self._ns_to_ms(self._now_ns() - phase4_started_ns)
             batch_phase_totals["phase4_refine_ms"] += phase4_ms
@@ -1149,6 +1189,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 llm_client=self.navigator_agent_llm_client,
                 tokenizer=self.navigator_agent_tokenizer,
                 use_chat_template=self.navigator_agent_use_chat_template,
+                enable_thinking=self.navigator_agent_enable_thinking,
             )
             phase5_ms = self._ns_to_ms(self._now_ns() - phase5_started_ns)
             batch_phase_totals["phase5_synthesize_ms"] += phase5_ms

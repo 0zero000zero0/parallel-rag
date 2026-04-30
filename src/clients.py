@@ -17,30 +17,22 @@ OpenAIChatMessage: TypeAlias = Dict[str, Any]
 
 
 class RetrieverClient:
-    def __init__(self,
-                 base_url: str,
-                 top_k: int = 5,
-                 timeout: int | None = None):
+    def __init__(self, base_url: str, top_k: int = 5, timeout: int | None = None):
         self.batch_search_endpoint = f"{base_url}/batch_search"
         self.top_k = top_k
         self.timeout = timeout
         self.session = requests.Session()
 
-    def batch_search(self,
-                     queries: List[str]) -> BatchSearchDocs:
+    def batch_search(self, queries: List[str]) -> BatchSearchDocs:
         """
         Returns: BatchSearchDocs 每个 query 对应的 doc 列表
         """
         if not queries:
             return []
-        payload = {
-            "query": queries,
-            "top_n": self.top_k,
-            "return_score": False
-        }
-        response = self.session.post(self.batch_search_endpoint,
-                                     json=payload,
-                                     timeout=self.timeout)
+        payload = {"query": queries, "top_n": self.top_k, "return_score": False}
+        response = self.session.post(
+            self.batch_search_endpoint, json=payload, timeout=self.timeout
+        )
         response.raise_for_status()
         batch_results = cast(BatchSearchDocs, response.json())
         return batch_results
@@ -53,21 +45,23 @@ class RetrieverClient:
         formatted_outputs: List[str] = []
         for search_results in batch_results:
             contents = [doc["contents"] for doc in search_results]
-            formatted_outputs.append("\n<information>\n" +
-                                     ";\n".join(contents) +
-                                     "\n</information>\n")
+            formatted_outputs.append(
+                "\n<information>\n" + ";\n".join(contents) + "\n</information>\n"
+            )
         return formatted_outputs
 
 
 class OpenAIClient:
-    def __init__(self,
-                 base_url: str,
-                 model: str,
-                 api_key: str | None = None,
-                 timeout: float | None = None,
-                 endpoint: str | None = None,
-                 extra_headers: Dict[str, str] | None = None,
-                 use_chat_template: bool = False):
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key: str | None = None,
+        timeout: float | None = None,
+        endpoint: str | None = None,
+        extra_headers: Dict[str, str] | None = None,
+        use_chat_template: bool = False,
+    ):
         default_endpoint = "/v1/completions"
         chosen_endpoint = endpoint if endpoint is not None else default_endpoint
         self.completions_endpoint = f"{base_url.rstrip('/')}{chosen_endpoint}"
@@ -82,8 +76,7 @@ class OpenAIClient:
             headers.update(extra_headers)
         self.headers = headers
 
-    def _validate_openai_chat_messages(
-            self, messages: Any) -> List[OpenAIChatMessage]:
+    def _validate_openai_chat_messages(self, messages: Any) -> List[OpenAIChatMessage]:
         if not isinstance(messages, list):
             raise ValueError(
                 "When use_chat_template=True, prompts must be list[openai_chat_message]"
@@ -95,8 +88,7 @@ class OpenAIClient:
         validated: List[OpenAIChatMessage] = []
         for i, message in enumerate(messages):
             if not isinstance(message, dict):
-                raise ValueError(
-                    f"Chat message at index {i} must be a dict")
+                raise ValueError(f"Chat message at index {i} must be a dict")
 
             role = message.get("role")
             content = message.get("content")
@@ -105,8 +97,7 @@ class OpenAIClient:
                     f"Chat message at index {i} has invalid role: {role!r}"
                 )
             if not isinstance(content, str):
-                raise ValueError(
-                    f"Chat message at index {i} must have string content")
+                raise ValueError(f"Chat message at index {i} must have string content")
 
             validated.append(message)
         return validated
@@ -116,11 +107,12 @@ class OpenAIClient:
             return False
         return all(
             isinstance(item, dict) and "role" in item and "content" in item
-            for item in value)
+            for item in value
+        )
 
-    def _prepare_prompts(self,
-                         prompts: List[Any],
-                         tokenizer: Any = None) -> List[str]:
+    def _prepare_prompts(
+        self, prompts: List[Any], tokenizer: Any = None, enable_thinking: bool = False
+    ) -> List[str]:
         if not self.use_chat_template:
             if all(isinstance(prompt, str) for prompt in prompts):
                 return prompts
@@ -137,26 +129,25 @@ class OpenAIClient:
         else:
             for i, prompt in enumerate(prompts):
                 try:
-                    conversations.append(
-                        self._validate_openai_chat_messages(prompt))
+                    conversations.append(self._validate_openai_chat_messages(prompt))
                 except ValueError as e:
                     raise ValueError(
-                        f"Invalid chat conversation at index {i}: {e}") from e
+                        f"Invalid chat conversation at index {i}: {e}"
+                    ) from e
 
         rendered_prompts: List[str] = []
         for messages in conversations:
-            rendered_prompt = tokenizer.apply_chat_template(messages,
-                                                            tokenize=False)
+            rendered_prompt = tokenizer.apply_chat_template(
+                messages, tokenize=False, enable_thinking=enable_thinking
+            )
             if not isinstance(rendered_prompt, str):
-                raise ValueError(
-                    "tokenizer.apply_chat_template must return str")
+                raise ValueError("tokenizer.apply_chat_template must return str")
             rendered_prompts.append(rendered_prompt)
         return rendered_prompts
 
-    def _build_payload(self,
-                       prompts: Any,
-                       config,
-                       stop_tokens: List[str]) -> Dict[str, Any]:
+    def _build_payload(
+        self, prompts: Any, config, stop_tokens: List[str]
+    ) -> Dict[str, Any]:
 
         if isinstance(config, dict):
             config = SimpleNamespace(**config)
@@ -176,11 +167,11 @@ class OpenAIClient:
         if isinstance(prompts, str):
             prompt_payload = [prompts]
         elif isinstance(prompts, list) and all(
-                isinstance(item, str) for item in prompts):
+            isinstance(item, str) for item in prompts
+        ):
             prompt_payload = prompts
         else:
-            raise ValueError(
-                "Prompt must be str or list[str] for /v1/completions")
+            raise ValueError("Prompt must be str or list[str] for /v1/completions")
         payload["prompt"] = prompt_payload
 
         if stop_tokens:
@@ -193,7 +184,8 @@ class OpenAIClient:
             self.completions_endpoint,
             json=payload,
             timeout=self.timeout,
-            headers=self.headers if self.headers else None)
+            headers=self.headers if self.headers else None,
+        )
         response.raise_for_status()
         return cast(Dict[str, Any], response.json())
 
@@ -204,15 +196,18 @@ class OpenAIClient:
             "finish_reason": choice.get("finish_reason"),
         }
 
-    def generate(self,
-                 prompts: List[Any],
-                 config,
-                 stop_tokens: List[str],
-                 tokenizer=None) -> List[Dict[str, Any]]:
+    def generate(
+        self,
+        prompts: List[Any],
+        config,
+        stop_tokens: List[str],
+        tokenizer=None,
+        enable_thinking: bool = False,
+    ) -> List[Dict[str, Any]]:
         if not prompts:
             return []
 
-        prepared_prompts = self._prepare_prompts(prompts, tokenizer)
+        prepared_prompts = self._prepare_prompts(prompts, tokenizer, enable_thinking)
         payload = self._build_payload(prepared_prompts, config, stop_tokens)
         try:
             data = self._post_json(payload)
@@ -221,38 +216,43 @@ class OpenAIClient:
             return []
 
         prompt_count = len(prepared_prompts)
-        grouped_choices: List[List[Dict[str, Any]]] = [[]
-                                                       for _ in range(
-                                                           prompt_count)]
+        grouped_choices: List[List[Dict[str, Any]]] = [[] for _ in range(prompt_count)]
         for choice in data.get("choices", []):
             idx = choice.get("index", 0)
             record = self._parse_choice(choice)
             if 0 <= idx < prompt_count:
                 grouped_choices[idx].append(record)
             else:
-                logger.warning(
-                    "Received choice index %s outside prompt range", idx)
+                logger.warning("Received choice index %s outside prompt range", idx)
 
         ordered_choices: List[Dict[str, Any]] = []
         for idx in range(prompt_count):
             if grouped_choices[idx]:
                 ordered_choices.append(grouped_choices[idx][0])
             else:
-                ordered_choices.append({
-                    "text": "",
-                    "finish_reason": None,
-                })
+                ordered_choices.append(
+                    {
+                        "text": "",
+                        "finish_reason": None,
+                    }
+                )
         return ordered_choices
 
-    def generate_text(self,
-                      prompts: List[Any],
-                      config,
-                      stop_tokens: List[str],
-                      tokenizer=None) -> List[str]:
+    def generate_text(
+        self,
+        prompts: List[Any],
+        config,
+        stop_tokens: List[str],
+        tokenizer=None,
+        enable_thinking: bool = False,
+    ) -> List[str]:
         return [
             choice["text"]
-            for choice in self.generate(prompts,
-                                        config,
-                                        stop_tokens,
-                                        tokenizer=tokenizer)
+            for choice in self.generate(
+                prompts,
+                config,
+                stop_tokens,
+                tokenizer=tokenizer,
+                enable_thinking=enable_thinking,
+            )
         ]

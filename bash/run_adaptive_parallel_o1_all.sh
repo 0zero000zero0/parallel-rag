@@ -72,25 +72,28 @@ for dataset in "${DATASETS[@]}"; do
     --navigator_agent_model "$NAVIGATOR_AGENT_MODEL" \
     --navigator_agent_model_path "$NAVIGATOR_AGENT_MODEL_PATH" \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.6 \
+    --navigator_agent_temperature 0.7 \
     --navigator_agent_top_p 0.8 \
     --navigator_agent_use_chat_template \
+    --navigator_agent_enable_thinking \
     --global_refine_agent_openai_base_url "$GLOBAL_REFINE_AGENT_OPENAI_BASE_URL" \
     --global_refine_agent_openai_api_key "$GLOBAL_REFINE_AGENT_OPENAI_API_KEY" \
     --global_refine_agent_model "$GLOBAL_REFINE_AGENT_MODEL" \
     --global_refine_agent_model_path "$GLOBAL_REFINE_AGENT_MODEL_PATH" \
     --global_refine_agent_max_tokens 1024 \
-    --global_refine_agent_temperature 0.6 \
+    --global_refine_agent_temperature 0.7 \
     --global_refine_agent_top_p 0.8 \
     --global_refine_agent_use_chat_template \
+    --global_refine_agent_enable_thinking \
     --path_agent_openai_base_url "$PATH_AGENT_OPENAI_BASE_URL" \
     --path_agent_openai_api_key "$PATH_AGENT_OPENAI_API_KEY" \
     --path_agent_model "$PATH_AGENT_MODEL" \
     --path_agent_model_path "$PATH_AGENT_MODEL_PATH" \
     --path_agent_max_tokens 1024 \
-    --path_agent_temperature 0.6 \
+    --path_agent_temperature 0.7 \
     --path_agent_top_p 0.8 \
     --path_agent_use_chat_template \
+    --path_agent_enable_thinking \
     --max_iterations 5 \
     --num_samples "$NUM_SAMPLES"
 
