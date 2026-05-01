@@ -2,7 +2,7 @@ import argparse
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from tqdm import tqdm
 
@@ -175,8 +175,8 @@ def main() -> None:
 
     pipeline = ParallelRAG.from_args(args)
 
-    output_records: List[Dict[str, Any]] = []
-    batch_timings: List[Dict[str, Any]] = []
+    output_records: list[dict[str, Any]] = []
+    batch_timings: list[dict[str, Any]] = []
     batch_size = max(1, int(args.batch_size))
     batch_starts = range(0, len(samples), batch_size)
 
@@ -195,8 +195,8 @@ def main() -> None:
         tqdm(batch_starts, desc="Processing batches", unit="batch")
     ):
         batch_samples = samples[batch_start : batch_start + batch_size]
-        questions: List[str] = []
-        validated_items: List[tuple[int, str, List[str]]] = []
+        questions: list[str] = []
+        validated_items: list[tuple[int, str, list[str]]] = []
         for offset, sample in enumerate(batch_samples):
             idx = batch_start + offset
             question = sample.get("question", "")
@@ -258,7 +258,7 @@ def main() -> None:
         float(item.get("batch_wall_ms", 0.0)) for item in batch_timings
     ]
 
-    timing_summary: Dict[str, Any] = {
+    timing_summary: dict[str, Any] = {
         "sample_count": len(samples),
         "batch_count": len(batch_timings),
         "read_data_ms": read_data_ms,

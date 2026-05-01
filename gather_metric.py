@@ -1,7 +1,7 @@
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -47,8 +47,8 @@ def sort_key_for_index(index_name: str) -> Any:
     return (1, index_name)
 
 
-def collect_metrics(method_model_dir: Path) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
+def collect_metrics(method_model_dir: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
 
     for dataset_dir in sorted(
         [p for p in method_model_dir.iterdir() if p.is_dir()], key=lambda p: p.name
@@ -72,7 +72,7 @@ def collect_metrics(method_model_dir: Path) -> List[Dict[str, Any]]:
                 print(f"[WARN] Skip non-dict metrics file: {metrics_file}")
                 continue
 
-            row: Dict[str, Any] = {
+            row: dict[str, Any] = {
                 "dataset": dataset_dir.name,
                 "index": index_dir.name,
             }
@@ -102,7 +102,7 @@ def main() -> None:
     df = df[preferred_front + other_cols]
     df = df.sort_values(by=["dataset", "index"], kind="stable").reset_index(drop=True)
 
-    saved_files: List[Path] = []
+    saved_files: list[Path] = []
     group: pd.DataFrame
     for index_name, group in df.groupby("index", sort=False):
         tmp_xlsx_path = method_model_dir / f"{index_name}.xlsx"

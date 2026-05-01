@@ -2,7 +2,6 @@
 import argparse
 import asyncio
 from collections import deque
-from typing import List
 
 from fastapi import FastAPI, HTTPException
 from flashrag.config import Config
@@ -53,7 +52,7 @@ class QueryRequest(BaseModel):
 
 
 class BatchQueryRequest(BaseModel):
-    query: List[str]
+    query: list[str]
     top_n: int = 10
     return_score: bool = False
 
@@ -87,14 +86,11 @@ async def search(request: QueryRequest):
                     Document(id=result["id"], contents=result["contents"])
                     for result in results
                 ], scores
-            else:
-                results = retriever_list[retriever_idx].search(
-                    query, top_n, return_score
-                )
-                return [
-                    Document(id=result["id"], contents=result["contents"])
-                    for result in results
-                ]
+            results = retriever_list[retriever_idx].search(query, top_n, return_score)
+            return [
+                Document(id=result["id"], contents=result["contents"])
+                for result in results
+            ]
         except Exception as e:
             print(f"Error during search: {e}")
             raise HTTPException(status_code=500, detail="Search failed")
@@ -131,17 +127,16 @@ async def batch_search(request: BatchQueryRequest):
                     ]
                     for res_list in results
                 ], scores
-            else:
-                results = retriever_list[retriever_idx].batch_search(
-                    query, top_n, return_score
-                )
-                return [
-                    [
-                        Document(id=result["id"], contents=result["contents"])
-                        for result in res_list
-                    ]
-                    for res_list in results
+            results = retriever_list[retriever_idx].batch_search(
+                query, top_n, return_score
+            )
+            return [
+                [
+                    Document(id=result["id"], contents=result["contents"])
+                    for result in res_list
                 ]
+                for res_list in results
+            ]
         except Exception as e:
             print(f"Error during batch search: {e}")
             raise HTTPException(status_code=500, detail="Batch search failed")

@@ -1,6 +1,6 @@
 import re
 from types import SimpleNamespace
-from typing import Any, List
+from typing import Any
 
 from src.clients import OpenAIClient, RetrieverClient
 
@@ -18,7 +18,7 @@ class PromptedGenerationBase:
         generation_max_tokens: int = 1024,
         generation_temperature: float = 0.7,
         generation_top_p: float = 0.9,
-        stop_tokens: List[str] | None = None,
+        stop_tokens: list[str] | None = None,
         use_chat_template: bool = False,
         tokenizer: Any = None,
     ):
@@ -79,7 +79,7 @@ class PromptedGenerationBase:
         if isinstance(prompt, str):
             return prompt
         if isinstance(prompt, list):
-            chunks: List[str] = []
+            chunks: list[str] = []
             for message in prompt:
                 if isinstance(message, dict):
                     role = str(message.get("role", ""))
@@ -88,7 +88,7 @@ class PromptedGenerationBase:
             return "\n".join(chunks)
         return str(prompt)
 
-    def _generate_text_batch(self, prompts: List[Any]) -> List[str]:
+    def _generate_text_batch(self, prompts: list[Any]) -> list[str]:
         if not prompts:
             return []
         config = self._make_config()
@@ -149,7 +149,7 @@ def build_retriever_client_from_args(args) -> RetrieverClient:
     )
 
 
-def parse_stop_tokens(args) -> List[str]:
+def parse_stop_tokens(args) -> list[str]:
     stop_tokens = getattr(args, "stop_tokens", None)
     if stop_tokens is None:
         return []

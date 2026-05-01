@@ -1,7 +1,7 @@
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from tqdm import tqdm
 
@@ -65,7 +65,7 @@ def main() -> None:
 
     pipeline = Cot.from_args(args)
 
-    output_records: List[Dict[str, Any]] = []
+    output_records: list[dict[str, Any]] = []
     batch_size = max(1, int(args.batch_size))
     batch_starts = range(0, len(samples), batch_size)
     if args.debug:
@@ -78,8 +78,8 @@ def main() -> None:
         debugpy.breakpoint()
     for batch_start in tqdm(batch_starts, desc="Processing batches", unit="batch"):
         batch_samples = samples[batch_start : batch_start + batch_size]
-        questions: List[str] = []
-        validated_items: List[tuple[int, str, List[str]]] = []
+        questions: list[str] = []
+        validated_items: list[tuple[int, str, list[str]]] = []
         for offset, sample in enumerate(batch_samples):
             idx = batch_start + offset
             question = sample.get("question", "")
@@ -87,7 +87,7 @@ def main() -> None:
             validated_items.append((idx, question, golden_answers))
             questions.append(question)
 
-        batch_results: List[Dict[str, Any]] = []
+        batch_results: list[dict[str, Any]] = []
         batch_error = ""
         try:
             batch_results = [dict(item) for item in pipeline.run_batch(questions)]

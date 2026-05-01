@@ -2,7 +2,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from flashrag.dataset import Dataset, Item
 from flashrag.evaluator import Evaluator
@@ -37,8 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def read_jsonlines(path: Path) -> List[Dict[str, Any]]:
-    records: List[Dict[str, Any]] = []
+def read_jsonlines(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             line = line.strip()
@@ -52,7 +52,7 @@ def read_jsonlines(path: Path) -> List[Dict[str, Any]]:
     return records
 
 
-def write_jsonlines(path: Path, records: List[Dict[str, Any]]) -> None:
+def write_jsonlines(path: Path, records: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for record in records:
@@ -66,7 +66,7 @@ def extract_answer_tag(text: str) -> str:
     return match.group(1).strip()
 
 
-def extract_answer(record: Dict[str, Any]) -> str:
+def extract_answer(record: dict[str, Any]) -> str:
     pred = str(record.get("predicted_answer_in_tag", "") or "").strip()
     if pred:
         return pred
@@ -99,7 +99,7 @@ def main() -> None:
     if not raw_records:
         raise ValueError("result_file is empty")
 
-    predictions: List[str] = []
+    predictions: list[str] = []
 
     dataset_path = args.dataset_path
     dataset_name = args.dataset_name

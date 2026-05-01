@@ -2,7 +2,7 @@ import hashlib
 import re
 import time
 from types import SimpleNamespace
-from typing import Any, Dict, List, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from src.clients import (
     BatchSearchDocs,
@@ -83,27 +83,27 @@ class PathAgentIterationRecord(PathAgentCoreRecord):
 class RefinedPathResult(PathAgentCoreRecord):
     think: str
     refined_information: str
-    selected_doc_ids: List[str]
+    selected_doc_ids: list[str]
 
 
 class PooledDocument(TypedDict):
     doc_id: str
     contents: str
-    sources: List[str]
-    source_directions: List[str]
-    source_queries: List[str]
+    sources: list[str]
+    source_directions: list[str]
+    source_queries: list[str]
 
 
 class NavigatorIterationRecord(AgentAnswerRecord):
     think: str
-    search_directions: List[SearchDirection]
+    search_directions: list[SearchDirection]
 
 
 class GlobalRefineIterationRecord(TypedDict):
     prompt: str
     refine_agent_output: str
-    pooled_docs: List[PooledDocument]
-    refined_paths: List[RefinedPathResult]
+    pooled_docs: list[PooledDocument]
+    refined_paths: list[RefinedPathResult]
 
 
 class FinalSynthesisRecord(AgentAnswerRecord):
@@ -113,7 +113,7 @@ class FinalSynthesisRecord(AgentAnswerRecord):
 class IterationRecord(TypedDict, total=False):
     iteration: int
     navigator: NavigatorIterationRecord
-    path_agents: List[PathAgentIterationRecord]
+    path_agents: list[PathAgentIterationRecord]
     global_refine: GlobalRefineIterationRecord
 
 
@@ -121,10 +121,10 @@ class ParallelO1Result(TypedDict):
     query: str
     max_iterations: int
     executed_iterations: int
-    iterations: List[IterationRecord]
+    iterations: list[IterationRecord]
     final_synthesis: FinalSynthesisRecord
     final_answer: str
-    timing: Dict[str, Any]
+    timing: dict[str, Any]
 
 
 class AdaptiveParallelO1(PromptedGenerationBase):
@@ -146,7 +146,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         synthesize_max_tokens: int = 512,
         synthesize_temperature: float = 0.3,
         synthesize_top_p: float = 0.9,
-        stop_tokens: List[str] | None = None,
+        stop_tokens: list[str] | None = None,
         navigator_agent_use_chat_template: bool = False,
         navigator_agent_tokenizer: Any = None,
         navigator_agent_enable_thinking: bool = False,
@@ -206,7 +206,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             raise ValueError(
                 "path_tokenizer is required when path_agent_use_chat_template=True"
             )
-        self.latest_batch_timing: Dict[str, Any] = {}
+        self.latest_batch_timing: dict[str, Any] = {}
 
     @classmethod
     def from_args(cls, args) -> "AdaptiveParallelO1":
@@ -463,8 +463,8 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             {"role": "user", "content": user_prompt},
         ]
 
-    def _extract_searches(self, text: str) -> List[str]:
-        searches: List[str] = []
+    def _extract_searches(self, text: str) -> list[str]:
+        searches: list[str] = []
         for matched in SEARCH_TAG_PATTERN.findall(text):
             q = matched.strip()
             if q and q not in searches:
@@ -473,13 +473,13 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
     def _generate_text_batch(
         self,
-        prompts: List[Any],
+        prompts: list[Any],
         config: SimpleNamespace,
         llm_client: OpenAIClient,
         tokenizer: Any = None,
         use_chat_template: bool | None = None,
         enable_thinking: bool = False,
-    ) -> List[str]:
+    ) -> list[str]:
         if not prompts:
             return []
 
@@ -505,13 +505,13 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         extracted = self._extract_last_tag(THINK_TAG_PATTERN, text)
         return extracted if extracted else text.strip()
 
-    def _parse_search_directions(self, text: str) -> List[SearchDirection]:
+    def _parse_search_directions(self, text: str) -> list[SearchDirection]:
         block_match = SEARCH_DIRECTIONS_PATTERN.search(text)
         if not block_match:
             return []
 
         block = block_match.group(1)
-        directions: List[SearchDirection] = []
+        directions: list[SearchDirection] = []
         for idx, match in enumerate(DIRECTION_TAG_PATTERN.finditer(block), start=1):
             direction_id = (match.group(1) or str(idx)).strip() or str(idx)
             direction_text = re.sub(r"\s+", " ", match.group(2)).strip()
@@ -527,7 +527,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         return directions
 
     def _build_navigator_agent_prompt(
-        self, question: str, historical_refinements: List[str], use_chat_template: bool
+        self, question: str, historical_refinements: list[str], use_chat_template: bool
     ) -> Any:
         history_block = (
             "\n\n".join(
@@ -600,9 +600,9 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         self,
         question: str,
         navigator_agent_think: str,
-        directions: List[SearchDirection],
-        path_plans: List[PathAgentIterationRecord],
-        pooled_docs: List[PooledDocument],
+        directions: list[SearchDirection],
+        path_plans: list[PathAgentIterationRecord],
+        pooled_docs: list[PooledDocument],
         use_chat_template: bool,
     ) -> Any:
         direction_block = (
@@ -697,7 +697,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         return f"\n<information>\n{report}\n</information>\n"
 
     def _build_final_answer_prompt(
-        self, question: str, historical_refinements: List[str], use_chat_template: bool
+        self, question: str, historical_refinements: list[str], use_chat_template: bool
     ) -> Any:
         history_block = (
             "\n\n".join(
@@ -735,10 +735,10 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
     def _pool_documents(
         self,
-        path_plans: List[PathAgentIterationRecord],
-        docs_map: dict[tuple[int, int], List[RetrieverDocument]],
+        path_plans: list[PathAgentIterationRecord],
+        docs_map: dict[tuple[int, int], list[RetrieverDocument]],
         sample_i: int,
-    ) -> List[PooledDocument]:
+    ) -> list[PooledDocument]:
         pooled_by_key: dict[str, PooledDocument] = {}
         for plan in path_plans:
             docs = docs_map.get((sample_i, plan["path_id"]), [])
@@ -777,12 +777,12 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         return duration_ns / 1_000_000.0
 
     def _init_batch_runtime(
-        self, questions: List[str], max_iterations: int
-    ) -> tuple[List[bool], List[ParallelO1Result], List[List[str]]]:
+        self, questions: list[str], max_iterations: int
+    ) -> tuple[list[bool], list[ParallelO1Result], list[list[str]]]:
         """Initialize per-sample runtime states for batched execution."""
         completed = [False] * len(questions)
 
-        results: List[ParallelO1Result] = [
+        results: list[ParallelO1Result] = [
             {
                 "query": q,
                 "max_iterations": max_iterations,
@@ -809,15 +809,15 @@ class AdaptiveParallelO1(PromptedGenerationBase):
         ]
 
         # Keep historical global refinements  for each sample.
-        refinement_histories: List[List[str]] = [[] for _ in questions]
+        refinement_histories: list[list[str]] = [[] for _ in questions]
         return completed, results, refinement_histories
 
     def run(self, question: str, max_iterations: int = 4) -> ParallelO1Result:
         return self.run_batch([question], max_iterations=max_iterations)[0]
 
     def run_batch(
-        self, questions: List[str], max_iterations: int = 4
-    ) -> List[ParallelO1Result]:
+        self, questions: list[str], max_iterations: int = 4
+    ) -> list[ParallelO1Result]:
         # -----------------------------
         # Phase 0: Runtime initialization
         # -----------------------------
@@ -825,7 +825,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             return []
 
         run_batch_started_ns = self._now_ns()
-        batch_phase_totals: Dict[str, float] = {
+        batch_phase_totals: dict[str, float] = {
             "phase1_navigator_ms": 0.0,
             "phase2_path_ms": 0.0,
             "phase3_retrieval_ms": 0.0,
@@ -833,7 +833,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             "phase4_refine_ms": 0.0,
             "phase5_synthesize_ms": 0.0,
         }
-        iteration_timings: List[Dict[str, Any]] = []
+        iteration_timings: list[dict[str, Any]] = []
 
         completed, results, refinement_histories = self._init_batch_runtime(
             questions=questions, max_iterations=max_iterations
@@ -859,7 +859,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
 
         for iteration_idx in range(max_iterations):
             iteration_started_ns = self._now_ns()
-            iteration_timing: Dict[str, Any] = {
+            iteration_timing: dict[str, Any] = {
                 "iteration": iteration_idx + 1,
                 "active_samples": 0,
                 "path_prompt_count": 0,
@@ -906,18 +906,18 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 results[sample_i]["timing"]["phase1_navigator_ms"] += phase1_share
 
             # Collect path-dispatch inputs from Navigator outputs.
-            path_agent_generation_prompts: List[Any] = []
-            path_meta: List[tuple[int, int, str, str, str, str]] = []
-            path_plans_by_sample: List[List[PathAgentIterationRecord]] = [
+            path_agent_generation_prompts: list[Any] = []
+            path_meta: list[tuple[int, int, str, str, str, str]] = []
+            path_plans_by_sample: list[list[PathAgentIterationRecord]] = [
                 [] for _ in range(len(questions))
             ]
-            path_records_by_sample: List[List[PathAgentIterationRecord]] = [
+            path_records_by_sample: list[list[PathAgentIterationRecord]] = [
                 [] for _ in range(len(questions))
             ]
-            directions_by_sample: List[List[SearchDirection]] = [
+            directions_by_sample: list[list[SearchDirection]] = [
                 [] for _ in range(len(questions))
             ]
-            iteration_records_by_sample: List[IterationRecord | None] = [
+            iteration_records_by_sample: list[IterationRecord | None] = [
                 None for _ in range(len(questions))
             ]
 
@@ -1000,8 +1000,8 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 for sample_i in phase2_samples:
                     results[sample_i]["timing"]["phase2_path_ms"] += phase2_share
 
-            flat_queries: List[str] = []
-            query_meta: List[tuple[int, int]] = []
+            flat_queries: list[str] = []
+            query_meta: list[tuple[int, int]] = []
 
             for idx, path_agent_output in enumerate(path_agent_outputs):
                 (
@@ -1084,20 +1084,20 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                         phase3_retrieval_share
                     )
 
-            docs_map: dict[tuple[int, int], List[RetrieverDocument]] = {}
+            docs_map: dict[tuple[int, int], list[RetrieverDocument]] = {}
             for idx, docs in enumerate(flat_docs):
                 meta = query_meta[idx]
                 docs_map[meta] = docs
 
-            refine_prompts: List[Any] = []
-            refine_meta: List[tuple[int, str, List[str], List[str]]] = []
-            refined_paths_by_sample: List[List[RefinedPathResult]] = [
+            refine_prompts: list[Any] = []
+            refine_meta: list[tuple[int, str, list[str], list[str]]] = []
+            refined_paths_by_sample: list[list[RefinedPathResult]] = [
                 [] for _ in range(len(questions))
             ]
-            pooled_docs_by_sample: List[List[PooledDocument]] = [
+            pooled_docs_by_sample: list[list[PooledDocument]] = [
                 [] for _ in range(len(questions))
             ]
-            retrieved_by_sample: List[BatchSearchDocs] = [
+            retrieved_by_sample: list[BatchSearchDocs] = [
                 [] for _ in range(len(questions))
             ]
 

@@ -1,7 +1,7 @@
 import re
 import time
 from types import SimpleNamespace
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from src.clients import (
     BatchSearchDocs,
@@ -34,22 +34,22 @@ class RefinedPathResult(TypedDict):
     think: str
     search_query: str
     refined_information: str
-    selected_doc_ids: List[str]
+    selected_doc_ids: list[str]
 
 
 class ParallelO1Result(TypedDict):
     query: str
     max_iterations: int
     executed_iterations: int
-    prompts: List[Any]
-    raw_outputs: List[str]
-    path_plans: List[List[PathPlan]]
-    retrieved_docs: List[BatchSearchDocs]
-    refine_prompts: List[List[str]]
-    refined_paths: List[List[RefinedPathResult]]
-    global_summaries: List[str]
+    prompts: list[Any]
+    raw_outputs: list[str]
+    path_plans: list[list[PathPlan]]
+    retrieved_docs: list[BatchSearchDocs]
+    refine_prompts: list[list[str]]
+    refined_paths: list[list[RefinedPathResult]]
+    global_summaries: list[str]
     final_answer: str
-    timing: Dict[str, Any]
+    timing: dict[str, Any]
 
 
 class FixedParallelO1:
@@ -73,7 +73,7 @@ class FixedParallelO1:
         synthesize_max_tokens: int = 768,
         synthesize_temperature: float = 0.3,
         synthesize_top_p: float = 0.9,
-        stop_tokens: List[str] | None = None,
+        stop_tokens: list[str] | None = None,
         use_chat_template: bool = False,
         tokenizer: Any = None,
     ):
@@ -96,7 +96,7 @@ class FixedParallelO1:
         self.synthesize_temperature = synthesize_temperature
         self.synthesize_top_p = synthesize_top_p
         self.stop_tokens = stop_tokens or []
-        self.latest_batch_timing: Dict[str, Any] = {}
+        self.latest_batch_timing: dict[str, Any] = {}
 
         self.use_chat_template = use_chat_template
         self.tokenizer = tokenizer
@@ -216,8 +216,8 @@ class FixedParallelO1:
             return ""
         return matches[-1].strip()
 
-    def _extract_searches(self, text: str) -> List[str]:
-        searches: List[str] = []
+    def _extract_searches(self, text: str) -> list[str]:
+        searches: list[str] = []
         for matched in SEARCH_TAG_PATTERN.findall(text):
             q = matched.strip()
             if q and q not in searches:
@@ -236,7 +236,7 @@ class FixedParallelO1:
         if isinstance(prompt, str):
             return prompt
         if isinstance(prompt, list):
-            chunks: List[str] = []
+            chunks: list[str] = []
             for msg in prompt:
                 if isinstance(msg, dict):
                     role = str(msg.get("role", ""))
@@ -246,8 +246,8 @@ class FixedParallelO1:
         return str(prompt)
 
     def _generate_text_batch(
-        self, prompts: List[Any], config: SimpleNamespace
-    ) -> List[str]:
+        self, prompts: list[Any], config: SimpleNamespace
+    ) -> list[str]:
         if not prompts:
             return []
 
@@ -291,7 +291,7 @@ class FixedParallelO1:
         return self._to_prompt(system_prompt, user_prompt)
 
     def _build_refine_agent_prompt(
-        self, question: str, think: str, query: str, docs: List[RetrieverDocument]
+        self, question: str, think: str, query: str, docs: list[RetrieverDocument]
     ) -> Any:
         docs_block = "\n\n".join(
             [
@@ -326,11 +326,11 @@ class FixedParallelO1:
         )
         return self._to_prompt(system_prompt, user_prompt)
 
-    def _build_parallel_appendix(self, refined_paths: List[RefinedPathResult]) -> str:
+    def _build_parallel_appendix(self, refined_paths: list[RefinedPathResult]) -> str:
         if not refined_paths:
             return "\n<information>\nNo helpful information found.\n</information>\n"
 
-        blocks: List[str] = []
+        blocks: list[str] = []
         for path in refined_paths:
             blocks.append(
                 "\n".join(
@@ -364,25 +364,25 @@ class FixedParallelO1:
         return self.run_batch([question], max_iterations=max_iterations)[0]
 
     def run_batch(
-        self, questions: List[str], max_iterations: int = 4
-    ) -> List[ParallelO1Result]:
+        self, questions: list[str], max_iterations: int = 4
+    ) -> list[ParallelO1Result]:
         if not questions:
             return []
 
         run_batch_started_ns = self._now_ns()
-        batch_phase_totals: Dict[str, float] = {
+        batch_phase_totals: dict[str, float] = {
             "phase1_trigger_ms": 0.0,
             "phase2_path_ms": 0.0,
             "phase3_retrieval_ms": 0.0,
             "phase4_refine_ms": 0.0,
             "phase5_finalize_ms": 0.0,
         }
-        iteration_timings: List[Dict[str, Any]] = []
+        iteration_timings: list[dict[str, Any]] = []
 
         dialogue_states = [f"User's Question: {q}" for q in questions]
         completed = [False] * len(questions)
 
-        results: List[ParallelO1Result] = [
+        results: list[ParallelO1Result] = [
             {
                 "query": q,
                 "max_iterations": max_iterations,
@@ -426,7 +426,7 @@ class FixedParallelO1:
 
         for iteration_idx in range(max_iterations):
             iteration_started_ns = self._now_ns()
-            iteration_timing: Dict[str, Any] = {
+            iteration_timing: dict[str, Any] = {
                 "iteration": iteration_idx + 1,
                 "active_samples": 0,
                 "path_prompt_count": 0,
@@ -457,8 +457,8 @@ class FixedParallelO1:
             for sample_i in active_indices:
                 results[sample_i]["timing"]["phase1_trigger_ms"] += phase1_share
 
-            path_generation_prompts: List[Any] = []
-            path_meta: List[tuple[int, int, str]] = []
+            path_generation_prompts: list[Any] = []
+            path_meta: list[tuple[int, int, str]] = []
 
             for local_i, sample_i in enumerate(active_indices):
                 trigger_output = trigger_outputs[local_i]
@@ -509,12 +509,12 @@ class FixedParallelO1:
                 for sample_i in phase2_samples:
                     results[sample_i]["timing"]["phase2_path_ms"] += phase2_share
 
-            path_plans_by_sample: List[List[PathPlan]] = [
+            path_plans_by_sample: list[list[PathPlan]] = [
                 [] for _ in range(len(questions))
             ]
 
-            flat_queries: List[str] = []
-            query_meta: List[tuple[int, int]] = []
+            flat_queries: list[str] = []
+            query_meta: list[tuple[int, int]] = []
 
             for idx, output in enumerate(path_outputs):
                 sample_i, path_id, path_prompt_text = path_meta[idx]
@@ -564,13 +564,13 @@ class FixedParallelO1:
                 for sample_i in phase3_samples:
                     results[sample_i]["timing"]["phase3_retrieval_ms"] += phase3_share
 
-            docs_map: dict[tuple[int, int], List[RetrieverDocument]] = {}
+            docs_map: dict[tuple[int, int], list[RetrieverDocument]] = {}
             for idx, docs in enumerate(flat_docs):
                 meta = query_meta[idx]
                 docs_map[meta] = docs
 
-            refine_prompts: List[Any] = []
-            refine_meta: List[tuple[int, int, str, str, List[str]]] = []
+            refine_prompts: list[Any] = []
+            refine_meta: list[tuple[int, int, str, str, list[str]]] = []
 
             for sample_i in active_indices:
                 sample_path_plans = path_plans_by_sample[sample_i]
@@ -611,13 +611,13 @@ class FixedParallelO1:
                 for sample_i in phase4_samples:
                     results[sample_i]["timing"]["phase4_refine_ms"] += phase4_share
 
-            refined_paths_by_sample: List[List[RefinedPathResult]] = [
+            refined_paths_by_sample: list[list[RefinedPathResult]] = [
                 [] for _ in range(len(questions))
             ]
-            retrieved_by_sample: List[BatchSearchDocs] = [
+            retrieved_by_sample: list[BatchSearchDocs] = [
                 [] for _ in range(len(questions))
             ]
-            refine_prompts_by_sample: List[List[Any]] = [
+            refine_prompts_by_sample: list[list[Any]] = [
                 [] for _ in range(len(questions))
             ]
 

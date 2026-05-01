@@ -1,4 +1,4 @@
-from typing import Any, List, TypedDict
+from typing import Any, TypedDict
 
 from src.prompted_generation_base import (
     PromptedGenerationBase,
@@ -54,11 +54,11 @@ class Cot(PromptedGenerationBase):
     def run(self, question: str) -> CotResult:
         return self.run_batch([question])[0]
 
-    def run_batch(self, questions: List[str]) -> List[CotResult]:
+    def run_batch(self, questions: list[str]) -> list[CotResult]:
         prompts = [self._build_prompt(question) for question in questions]
         outputs = self._generate_text_batch(prompts)
 
-        results: List[CotResult] = []
+        results: list[CotResult] = []
         for question, prompt, output in zip(questions, prompts, outputs):
             results.append(
                 {
