@@ -162,7 +162,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Whether path agent enables thinking mode; default inherits navigator_agent_enable_thinking",
     )
 
-
     parser.add_argument("--navigator_agent_max_tokens", type=int, default=256)
     parser.add_argument("--navigator_agent_temperature", type=float, default=0.6)
     parser.add_argument("--navigator_agent_top_p", type=float, default=0.9)

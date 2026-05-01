@@ -1,9 +1,11 @@
 from typing import Any, List, TypedDict
 
-from src.prompted_generation_base import (PromptedGenerationBase,
-                                          build_openai_client_from_args,
-                                          parse_stop_tokens,
-                                          resolve_chat_template_components)
+from src.prompted_generation_base import (
+    PromptedGenerationBase,
+    build_openai_client_from_args,
+    parse_stop_tokens,
+    resolve_chat_template_components,
+)
 
 COT_SYSTEM_PROMPT = (
     "You are a helpful assistant that can solve the given question step by step. "
@@ -28,24 +30,25 @@ class Cot(PromptedGenerationBase):
     def from_args(cls, args) -> "Cot":
         use_chat_template, tokenizer = resolve_chat_template_components(args)
         llm_client = build_openai_client_from_args(
-            args, use_chat_template=use_chat_template)
-        return cls(llm_client=llm_client,
-                   generation_max_tokens=int(
-                       getattr(args, "generation_max_tokens", 1024)),
-                   generation_temperature=float(
-                       getattr(args, "generation_temperature", 0.7)),
-                   generation_top_p=float(getattr(args,
-                                                  "generation_top_p",
-                                                  0.9)),
-                   stop_tokens=parse_stop_tokens(args),
-                   use_chat_template=use_chat_template,
-                   tokenizer=tokenizer)
+            args, use_chat_template=use_chat_template
+        )
+        return cls(
+            llm_client=llm_client,
+            generation_max_tokens=int(getattr(args, "generation_max_tokens", 1024)),
+            generation_temperature=float(getattr(args, "generation_temperature", 0.7)),
+            generation_top_p=float(getattr(args, "generation_top_p", 0.9)),
+            stop_tokens=parse_stop_tokens(args),
+            use_chat_template=use_chat_template,
+            tokenizer=tokenizer,
+        )
 
     def _build_prompt(self, question: str) -> Any:
-        user_prompt = "\n\n".join([
-            self._format_external_context("Question", question),
-            "Think step by step and then answer the question.",
-        ])
+        user_prompt = "\n\n".join(
+            [
+                self._format_external_context("Question", question),
+                "Think step by step and then answer the question.",
+            ]
+        )
         return self.format_prompt(COT_SYSTEM_PROMPT, user_prompt)
 
     def run(self, question: str) -> CotResult:
@@ -57,12 +60,14 @@ class Cot(PromptedGenerationBase):
 
         results: List[CotResult] = []
         for question, prompt, output in zip(questions, prompts, outputs):
-            results.append({
-                "query": question,
-                "prompt": self._prompt_to_text(prompt),
-                "raw_output": output,
-                "think": self._extract_think(output),
-                "final_answer": self._extract_answer(output),
-                "boxed_answer": self._extract_boxed(output),
-            })
+            results.append(
+                {
+                    "query": question,
+                    "prompt": self._prompt_to_text(prompt),
+                    "raw_output": output,
+                    "think": self._extract_think(output),
+                    "final_answer": self._extract_answer(output),
+                    "boxed_answer": self._extract_boxed(output),
+                }
+            )
         return results

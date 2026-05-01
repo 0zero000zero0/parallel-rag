@@ -80,11 +80,21 @@ async def search(request: QueryRequest):
         # print(f"Using retriever {retriever_idx} for query: {query[:20]}...")
         try:
             if return_score:
-                results, scores = retriever_list[retriever_idx].search(query, top_n, return_score)
-                return [Document(id=result["id"], contents=result["contents"]) for result in results], scores
+                results, scores = retriever_list[retriever_idx].search(
+                    query, top_n, return_score
+                )
+                return [
+                    Document(id=result["id"], contents=result["contents"])
+                    for result in results
+                ], scores
             else:
-                results = retriever_list[retriever_idx].search(query, top_n, return_score)
-                return [Document(id=result["id"], contents=result["contents"]) for result in results]
+                results = retriever_list[retriever_idx].search(
+                    query, top_n, return_score
+                )
+                return [
+                    Document(id=result["id"], contents=result["contents"])
+                    for result in results
+                ]
         except Exception as e:
             print(f"Error during search: {e}")
             raise HTTPException(status_code=500, detail="Search failed")
@@ -106,18 +116,30 @@ async def batch_search(request: BatchQueryRequest):
     # 异步等待一个可用的检索器
     async with retriever_semaphore:
         retriever_idx = available_retrievers.popleft()
-        print(f"Using retriever {retriever_idx} for batch search of {len(query)} queries...")
+        print(
+            f"Using retriever {retriever_idx} for batch search of {len(query)} queries..."
+        )
         try:
             if return_score:
-                results, scores = retriever_list[retriever_idx].batch_search(query, top_n, return_score)
+                results, scores = retriever_list[retriever_idx].batch_search(
+                    query, top_n, return_score
+                )
                 return [
-                    [Document(id=result["id"], contents=result["contents"]) for result in res_list]
+                    [
+                        Document(id=result["id"], contents=result["contents"])
+                        for result in res_list
+                    ]
                     for res_list in results
                 ], scores
             else:
-                results = retriever_list[retriever_idx].batch_search(query, top_n, return_score)
+                results = retriever_list[retriever_idx].batch_search(
+                    query, top_n, return_score
+                )
                 return [
-                    [Document(id=result["id"], contents=result["contents"]) for result in res_list]
+                    [
+                        Document(id=result["id"], contents=result["contents"])
+                        for result in res_list
+                    ]
                     for res_list in results
                 ]
         except Exception as e:
@@ -148,7 +170,9 @@ if __name__ == "__main__":
         default=None,
         help='Override gpu_id in config file, e.g. "0" or "0,1"',
     )
-    parser.add_argument("--port", type=int, default=9000, help="Port to run the server on")
+    parser.add_argument(
+        "--port", type=int, default=9000, help="Port to run the server on"
+    )
     args = parser.parse_args()
 
     # 初始化检索器
