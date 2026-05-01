@@ -8,3 +8,4 @@ tmp/
 bash/vllm.sh
 time-test/
 archive/
+output/
