@@ -85,3 +85,9 @@ for dataset in "${DATASETS[@]}"; do
 done
 
 echo "All datasets done."
+
+
+python gather_metric.py \
+ --method  fixed-parallel-o1 \
+ --model Qwen3-32B \
+ --outputs_root outputs

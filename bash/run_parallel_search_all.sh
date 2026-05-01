@@ -84,6 +84,6 @@ done
 echo "All datasets done."
 
 python gather_metric.py \
- --method parallel-search\
+ --method parallel-search \
  --model "${NAVIGATOR_AGENT_MODEL}" \
  --outputs_root outputs

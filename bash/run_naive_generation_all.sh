@@ -83,3 +83,8 @@ for dataset in "${DATASETS[@]}"; do
 done
 
 echo "All datasets done."
+
+python gather_metric.py \
+ --method  naive-generation \
+ --model Qwen3-32B \
+ --outputs_root outputs
