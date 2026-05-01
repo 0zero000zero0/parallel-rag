@@ -22,7 +22,6 @@ python run_fixed_parallel_o1.py \
   --openai_api_key "$OPENAI_API_KEY" \
   --model "$MODEL" \
   --num_parallel 3 \
-  --docs_per_query 5 \
   --trigger_max_tokens 512 \
   --trigger_temperature 1.0 \
   --trigger_top_p 0.9 \

@@ -25,7 +25,6 @@ python run_parallel_rag.py \
   --batch_size 10 \
   --retriever_base_url "$RETRIEVER_BASE_URL" \
   --retriever_top_k 5 \
-  --docs_per_query 5 \
   --navigator_agent_openai_base_url "$NAVIGATOR_AGENT_OPENAI_BASE_URL" \
   --navigator_agent_openai_api_key "$NAVIGATOR_AGENT_OPENAI_API_KEY" \
   --navigator_agent_model "$NAVIGATOR_AGENT_MODEL" \

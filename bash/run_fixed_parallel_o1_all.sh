@@ -53,7 +53,6 @@ for dataset in "${DATASETS[@]}"; do
     --openai_api_key "$OPENAI_API_KEY" \
     --model "$MODEL" \
     --num_parallel 3 \
-    --docs_per_query 5 \
     --trigger_max_tokens 512 \
     --trigger_temperature 0.8 \
     --trigger_top_p 0.8 \
@@ -86,3 +85,9 @@ for dataset in "${DATASETS[@]}"; do
 done
 
 echo "All datasets done."
+
+
+python gather_metric.py \
+ --method  fixed-parallel-o1 \
+ --model Qwen3-32B \
+ --outputs_root outputs

@@ -21,7 +21,6 @@ python run_search_o1.py \
   --openai_base_url "$OPENAI_BASE_URL" \
   --openai_api_key "$OPENAI_API_KEY" \
   --model "$MODEL" \
-  --docs_per_query 5 \
   --max_search_limit 5 \
   --search_max_tokens 512 \
   --search_temperature 1.0 \

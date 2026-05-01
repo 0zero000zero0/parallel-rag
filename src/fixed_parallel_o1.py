@@ -3,17 +3,23 @@ import time
 from types import SimpleNamespace
 from typing import Any, Dict, List, TypedDict
 
-from src.clients import (BatchSearchDocs, OpenAIClient, RetrieverClient,
-                         RetrieverDocument)
+from src.clients import (
+    BatchSearchDocs,
+    OpenAIClient,
+    RetrieverClient,
+    RetrieverDocument,
+)
 
-THINK_TAG_PATTERN = re.compile(r"<think>(.*?)</think>",
-                               flags=re.DOTALL | re.IGNORECASE)
-SEARCH_TAG_PATTERN = re.compile(r"<search>(.*?)</search>",
-                                flags=re.DOTALL | re.IGNORECASE)
-ANSWER_TAG_PATTERN = re.compile(r"<answer>(.*?)</answer>",
-                                flags=re.DOTALL | re.IGNORECASE)
-INFO_TAG_PATTERN = re.compile(r"<information>(.*?)</information>",
-                              flags=re.DOTALL | re.IGNORECASE)
+THINK_TAG_PATTERN = re.compile(r"<think>(.*?)</think>", flags=re.DOTALL | re.IGNORECASE)
+SEARCH_TAG_PATTERN = re.compile(
+    r"<search>(.*?)</search>", flags=re.DOTALL | re.IGNORECASE
+)
+ANSWER_TAG_PATTERN = re.compile(
+    r"<answer>(.*?)</answer>", flags=re.DOTALL | re.IGNORECASE
+)
+INFO_TAG_PATTERN = re.compile(
+    r"<information>(.*?)</information>", flags=re.DOTALL | re.IGNORECASE
+)
 
 
 class PathPlan(TypedDict):
@@ -47,33 +53,33 @@ class ParallelO1Result(TypedDict):
 
 
 class FixedParallelO1:
-    def __init__(self,
-                 retriever: RetrieverClient,
-                 llm_client: OpenAIClient,
-                 parallel_path_count: int = 3,
-                 docs_per_query: int = 3,
-                 trigger_max_tokens: int = 256,
-                 trigger_temperature: float = 0.6,
-                 trigger_top_p: float = 0.9,
-                 path_max_tokens: int = 384,
-                 path_temperature: float = 0.8,
-                 path_top_p: float = 0.95,
-                 refine_max_tokens: int = 384,
-                 refine_temperature: float = 0.2,
-                 refine_top_p: float = 0.9,
-                 summarize_max_tokens: int = 512,
-                 summarize_temperature: float = 0.3,
-                 summarize_top_p: float = 0.9,
-                 synthesize_max_tokens: int = 768,
-                 synthesize_temperature: float = 0.3,
-                 synthesize_top_p: float = 0.9,
-                 stop_tokens: List[str] | None = None,
-                 use_chat_template: bool = False,
-                 tokenizer: Any = None):
+    def __init__(
+        self,
+        retriever: RetrieverClient,
+        llm_client: OpenAIClient,
+        parallel_path_count: int = 3,
+        trigger_max_tokens: int = 256,
+        trigger_temperature: float = 0.6,
+        trigger_top_p: float = 0.9,
+        path_max_tokens: int = 384,
+        path_temperature: float = 0.8,
+        path_top_p: float = 0.95,
+        refine_max_tokens: int = 384,
+        refine_temperature: float = 0.2,
+        refine_top_p: float = 0.9,
+        summarize_max_tokens: int = 512,
+        summarize_temperature: float = 0.3,
+        summarize_top_p: float = 0.9,
+        synthesize_max_tokens: int = 768,
+        synthesize_temperature: float = 0.3,
+        synthesize_top_p: float = 0.9,
+        stop_tokens: List[str] | None = None,
+        use_chat_template: bool = False,
+        tokenizer: Any = None,
+    ):
         self.retriever = retriever
         self.llm_client = llm_client
         self.parallel_path_count = max(1, parallel_path_count)
-        self.docs_per_query = max(1, docs_per_query)
         self.trigger_max_tokens = trigger_max_tokens
         self.trigger_temperature = trigger_temperature
         self.trigger_top_p = trigger_top_p
@@ -96,27 +102,29 @@ class FixedParallelO1:
         self.tokenizer = tokenizer
         self.llm_client.use_chat_template = use_chat_template
         if self.use_chat_template and self.tokenizer is None:
-            raise ValueError(
-                "tokenizer is required when use_chat_template=True")
+            raise ValueError("tokenizer is required when use_chat_template=True")
 
     @classmethod
     def from_args(cls, args) -> "FixedParallelO1":
         retriever_base_url = getattr(
-            args, "retriever_base_url", "http://127.0.0.1:9000")
+            args, "retriever_base_url", "http://127.0.0.1:9000"
+        )
         retriever_top_k = int(getattr(args, "retriever_top_k", 5))
         retriever_timeout = getattr(args, "retriever_timeout", None)
 
-        openai_base_url = getattr(
-            args, "openai_base_url", "http://127.0.0.1:8001")
+        openai_base_url = getattr(args, "openai_base_url", "http://127.0.0.1:8001")
         openai_api_key = getattr(args, "openai_api_key", "TEST")
-        model = getattr(args, "model", None) or getattr(
-            args, "llm_model", "Qwen3-14B")
+        model = getattr(args, "model", None) or getattr(args, "llm_model", "Qwen3-14B")
         llm_timeout = getattr(args, "llm_timeout", None)
 
         use_chat_template = getattr(args, "use_chat_template", False)
         if isinstance(use_chat_template, str):
             use_chat_template = use_chat_template.lower() in {
-                "1", "true", "yes", "y", "on"
+                "1",
+                "true",
+                "yes",
+                "y",
+                "on",
             }
         else:
             use_chat_template = bool(use_chat_template)
@@ -125,11 +133,12 @@ class FixedParallelO1:
         model_path = getattr(args, "model_path", None)
         if use_chat_template and tokenizer is None and model_path:
             from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(model_path,
-                                                      trust_remote_code=True)
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_path, trust_remote_code=True
+            )
 
         parallel_path_count = int(getattr(args, "parallel_path_count", 3))
-        docs_per_query = int(getattr(args, "docs_per_query", 3))
 
         trigger_max_tokens = int(getattr(args, "trigger_max_tokens", 256))
         trigger_temperature = float(getattr(args, "trigger_temperature", 0.6))
@@ -144,57 +153,62 @@ class FixedParallelO1:
         refine_top_p = float(getattr(args, "refine_top_p", 0.9))
 
         summarize_max_tokens = int(getattr(args, "summarize_max_tokens", 512))
-        summarize_temperature = float(
-            getattr(args, "summarize_temperature", 0.3))
+        summarize_temperature = float(getattr(args, "summarize_temperature", 0.3))
         summarize_top_p = float(getattr(args, "summarize_top_p", 0.9))
 
-        synthesize_max_tokens = int(
-            getattr(args, "synthesize_max_tokens", 768))
-        synthesize_temperature = float(
-            getattr(args, "synthesize_temperature", 0.3))
+        synthesize_max_tokens = int(getattr(args, "synthesize_max_tokens", 768))
+        synthesize_temperature = float(getattr(args, "synthesize_temperature", 0.3))
         synthesize_top_p = float(getattr(args, "synthesize_top_p", 0.9))
 
         stop_tokens = getattr(args, "stop_tokens", None)
         if isinstance(stop_tokens, str):
             stop_tokens = [token for token in stop_tokens.split(",") if token]
 
-        retriever_client = RetrieverClient(base_url=retriever_base_url,
-                                           top_k=retriever_top_k,
-                                           timeout=retriever_timeout)
-        llm_client = OpenAIClient(base_url=openai_base_url,
-                                  model=model,
-                                  api_key=openai_api_key,
-                                  timeout=llm_timeout,
-                                  use_chat_template=use_chat_template)
-        return cls(retriever=retriever_client,
-                   llm_client=llm_client,
-                   parallel_path_count=parallel_path_count,
-                   docs_per_query=docs_per_query,
-                   trigger_max_tokens=trigger_max_tokens,
-                   trigger_temperature=trigger_temperature,
-                   trigger_top_p=trigger_top_p,
-                   path_max_tokens=path_max_tokens,
-                   path_temperature=path_temperature,
-                   path_top_p=path_top_p,
-                   refine_max_tokens=refine_max_tokens,
-                   refine_temperature=refine_temperature,
-                   refine_top_p=refine_top_p,
-                   summarize_max_tokens=summarize_max_tokens,
-                   summarize_temperature=summarize_temperature,
-                   summarize_top_p=summarize_top_p,
-                   synthesize_max_tokens=synthesize_max_tokens,
-                   synthesize_temperature=synthesize_temperature,
-                   synthesize_top_p=synthesize_top_p,
-                   stop_tokens=stop_tokens,
-                   use_chat_template=use_chat_template,
-                   tokenizer=tokenizer)
+        retriever_client = RetrieverClient(
+            base_url=retriever_base_url,
+            top_k=retriever_top_k,
+            timeout=retriever_timeout,
+        )
+        llm_client = OpenAIClient(
+            base_url=openai_base_url,
+            model=model,
+            api_key=openai_api_key,
+            timeout=llm_timeout,
+            use_chat_template=use_chat_template,
+        )
+        return cls(
+            retriever=retriever_client,
+            llm_client=llm_client,
+            parallel_path_count=parallel_path_count,
+            trigger_max_tokens=trigger_max_tokens,
+            trigger_temperature=trigger_temperature,
+            trigger_top_p=trigger_top_p,
+            path_max_tokens=path_max_tokens,
+            path_temperature=path_temperature,
+            path_top_p=path_top_p,
+            refine_max_tokens=refine_max_tokens,
+            refine_temperature=refine_temperature,
+            refine_top_p=refine_top_p,
+            summarize_max_tokens=summarize_max_tokens,
+            summarize_temperature=summarize_temperature,
+            summarize_top_p=summarize_top_p,
+            synthesize_max_tokens=synthesize_max_tokens,
+            synthesize_temperature=synthesize_temperature,
+            synthesize_top_p=synthesize_top_p,
+            stop_tokens=stop_tokens,
+            use_chat_template=use_chat_template,
+            tokenizer=tokenizer,
+        )
 
-    def _make_config(self, max_tokens: int, temperature: float,
-                     top_p: float) -> SimpleNamespace:
-        return SimpleNamespace(max_completion_length=max_tokens,
-                               temperature=temperature,
-                               top_p=top_p,
-                               vllm_n=1)
+    def _make_config(
+        self, max_tokens: int, temperature: float, top_p: float
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            max_completion_length=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            vllm_n=1,
+        )
 
     def _extract_last_tag(self, pattern: re.Pattern[str], text: str) -> str:
         matches = pattern.findall(text)
@@ -231,21 +245,19 @@ class FixedParallelO1:
             return "\n".join(chunks)
         return str(prompt)
 
-    def _generate_text_batch(self, prompts: List[Any],
-                             config: SimpleNamespace) -> List[str]:
+    def _generate_text_batch(
+        self, prompts: List[Any], config: SimpleNamespace
+    ) -> List[str]:
         if not prompts:
             return []
 
         if not self.use_chat_template:
             prompt_texts = [self._prompt_to_text(p) for p in prompts]
-            return self.llm_client.generate_text(prompt_texts,
-                                                 config,
-                                                 self.stop_tokens)
+            return self.llm_client.generate_text(prompt_texts, config, self.stop_tokens)
 
-        return self.llm_client.generate_text(prompts,
-                                             config,
-                                             self.stop_tokens,
-                                             tokenizer=self.tokenizer)
+        return self.llm_client.generate_text(
+            prompts, config, self.stop_tokens, tokenizer=self.tokenizer
+        )
 
     def _build_main_agent_prompt(self, user_input: str) -> Any:
         system_prompt = (
@@ -259,8 +271,9 @@ class FixedParallelO1:
         )
         return self._to_prompt(system_prompt, user_input)
 
-    def _build_path_agent_prompt(self, state_prompt: str,
-                                 original_question: str) -> Any:
+    def _build_path_agent_prompt(
+        self, state_prompt: str, original_question: str
+    ) -> Any:
         main_queries = self._extract_searches(state_prompt)
         main_query = main_queries[-1] if main_queries else ""
 
@@ -277,15 +290,15 @@ class FixedParallelO1:
         )
         return self._to_prompt(system_prompt, user_prompt)
 
-    def _build_refine_agent_prompt(self,
-                                   question: str,
-                                   think: str,
-                                   query: str,
-                                   docs: List[RetrieverDocument]) -> Any:
-        docs_block = "\n\n".join([
-            f"DocID: {doc.get('id', '')}\nContent: {doc.get('contents', '')}"
-            for doc in docs[:self.docs_per_query]
-        ])
+    def _build_refine_agent_prompt(
+        self, question: str, think: str, query: str, docs: List[RetrieverDocument]
+    ) -> Any:
+        docs_block = "\n\n".join(
+            [
+                f"DocID: {doc.get('id', '')}\nContent: {doc.get('contents', '')}"
+                for doc in docs
+            ]
+        )
         if not docs_block:
             docs_block = "No retrieved documents."
 
@@ -313,20 +326,22 @@ class FixedParallelO1:
         )
         return self._to_prompt(system_prompt, user_prompt)
 
-    def _build_parallel_appendix(self,
-                                 refined_paths: List[RefinedPathResult]) -> str:
+    def _build_parallel_appendix(self, refined_paths: List[RefinedPathResult]) -> str:
         if not refined_paths:
             return "\n<information>\nNo helpful information found.\n</information>\n"
 
         blocks: List[str] = []
         for path in refined_paths:
             blocks.append(
-                "\n".join([
-                    f"Path: p_{path['path_id']}",
-                    f"<think>{path['think']}</think>",
-                    f"<search>{path['search_query']}</search>",
-                    f"<information>{path['refined_information']}</information>",
-                ]))
+                "\n".join(
+                    [
+                        f"Path: p_{path['path_id']}",
+                        f"<think>{path['think']}</think>",
+                        f"<search>{path['search_query']}</search>",
+                        f"<information>{path['refined_information']}</information>",
+                    ]
+                )
+            )
         merged = "\n\n".join(blocks)
         return f"\n<information>\n{merged}\n</information>\n"
 
@@ -348,9 +363,9 @@ class FixedParallelO1:
     def run(self, question: str, max_iterations: int = 4) -> ParallelO1Result:
         return self.run_batch([question], max_iterations=max_iterations)[0]
 
-    def run_batch(self,
-                  questions: List[str],
-                  max_iterations: int = 4) -> List[ParallelO1Result]:
+    def run_batch(
+        self, questions: List[str], max_iterations: int = 4
+    ) -> List[ParallelO1Result]:
         if not questions:
             return []
 
@@ -367,38 +382,47 @@ class FixedParallelO1:
         dialogue_states = [f"User's Question: {q}" for q in questions]
         completed = [False] * len(questions)
 
-        results: List[ParallelO1Result] = [{
-            "query": q,
-            "max_iterations": max_iterations,
-            "executed_iterations": 0,
-            "prompts": [],
-            "raw_outputs": [],
-            "path_plans": [],
-            "retrieved_docs": [],
-            "refine_prompts": [],
-            "refined_paths": [],
-            "global_summaries": [],
-            "final_answer": "",
-            "timing": {
-                "phase1_trigger_ms": 0.0,
-                "phase2_path_ms": 0.0,
-                "phase3_retrieval_ms": 0.0,
-                "phase4_refine_ms": 0.0,
-                "phase5_finalize_ms": 0.0,
-                "total_ms": 0.0,
+        results: List[ParallelO1Result] = [
+            {
+                "query": q,
+                "max_iterations": max_iterations,
                 "executed_iterations": 0,
-            },
-        } for q in questions]
+                "prompts": [],
+                "raw_outputs": [],
+                "path_plans": [],
+                "retrieved_docs": [],
+                "refine_prompts": [],
+                "refined_paths": [],
+                "global_summaries": [],
+                "final_answer": "",
+                "timing": {
+                    "phase1_trigger_ms": 0.0,
+                    "phase2_path_ms": 0.0,
+                    "phase3_retrieval_ms": 0.0,
+                    "phase4_refine_ms": 0.0,
+                    "phase5_finalize_ms": 0.0,
+                    "total_ms": 0.0,
+                    "executed_iterations": 0,
+                },
+            }
+            for q in questions
+        ]
 
-        trigger_config = self._make_config(max_tokens=self.trigger_max_tokens,
-                                           temperature=self.trigger_temperature,
-                                           top_p=self.trigger_top_p)
-        path_config = self._make_config(max_tokens=self.path_max_tokens,
-                                        temperature=self.path_temperature,
-                                        top_p=self.path_top_p)
-        refine_config = self._make_config(max_tokens=self.refine_max_tokens,
-                                          temperature=self.refine_temperature,
-                                          top_p=self.refine_top_p)
+        trigger_config = self._make_config(
+            max_tokens=self.trigger_max_tokens,
+            temperature=self.trigger_temperature,
+            top_p=self.trigger_top_p,
+        )
+        path_config = self._make_config(
+            max_tokens=self.path_max_tokens,
+            temperature=self.path_temperature,
+            top_p=self.path_top_p,
+        )
+        refine_config = self._make_config(
+            max_tokens=self.refine_max_tokens,
+            temperature=self.refine_temperature,
+            top_p=self.refine_top_p,
+        )
 
         for iteration_idx in range(max_iterations):
             iteration_started_ns = self._now_ns()
@@ -425,8 +449,7 @@ class FixedParallelO1:
                 for i in active_indices
             ]
             phase1_started_ns = self._now_ns()
-            trigger_outputs = self._generate_text_batch(active_prompts,
-                                                        trigger_config)
+            trigger_outputs = self._generate_text_batch(active_prompts, trigger_config)
             phase1_ms = self._ns_to_ms(self._now_ns() - phase1_started_ns)
             batch_phase_totals["phase1_trigger_ms"] += phase1_ms
             iteration_timing["phase1_trigger_ms"] = phase1_ms
@@ -456,23 +479,26 @@ class FixedParallelO1:
                         f"Main Agent Output:\n{trigger_output}\n"
                     )
                     path_prompt = self._build_path_agent_prompt(
-                        path_state, results[sample_i]["query"])
+                        path_state, results[sample_i]["query"]
+                    )
                     path_generation_prompts.append(path_prompt)
                     path_meta.append(
-                        (sample_i, path_id, self._prompt_to_text(path_prompt)))
+                        (sample_i, path_id, self._prompt_to_text(path_prompt))
+                    )
 
-            iteration_timing["path_prompt_count"] = len(
-                path_generation_prompts)
+            iteration_timing["path_prompt_count"] = len(path_generation_prompts)
 
             if not path_generation_prompts:
                 iteration_timing["iteration_total_ms"] = self._ns_to_ms(
-                    self._now_ns() - iteration_started_ns)
+                    self._now_ns() - iteration_started_ns
+                )
                 iteration_timings.append(iteration_timing)
                 continue
 
             phase2_started_ns = self._now_ns()
-            path_outputs = self._generate_text_batch(path_generation_prompts,
-                                                     path_config)
+            path_outputs = self._generate_text_batch(
+                path_generation_prompts, path_config
+            )
             phase2_ms = self._ns_to_ms(self._now_ns() - phase2_started_ns)
             batch_phase_totals["phase2_path_ms"] += phase2_ms
             iteration_timing["phase2_path_ms"] = phase2_ms
@@ -514,13 +540,15 @@ class FixedParallelO1:
             for sample_i in range(len(questions)):
                 if path_plans_by_sample[sample_i]:
                     results[sample_i]["path_plans"].append(
-                        path_plans_by_sample[sample_i])
+                        path_plans_by_sample[sample_i]
+                    )
 
             if not flat_queries:
                 for sample_i in active_indices:
                     completed[sample_i] = True
                 iteration_timing["iteration_total_ms"] = self._ns_to_ms(
-                    self._now_ns() - iteration_started_ns)
+                    self._now_ns() - iteration_started_ns
+                )
                 iteration_timings.append(iteration_timing)
                 continue
 
@@ -551,8 +579,7 @@ class FixedParallelO1:
                 for plan in sample_path_plans:
                     key = (sample_i, plan["path_id"])
                     docs = docs_map.get(key, [])
-                    selected_doc_ids = [doc.get("id", "")
-                                        for doc in docs[:self.docs_per_query]]
+                    selected_doc_ids = [doc.get("id", "") for doc in docs]
                     refine_prompt = self._build_refine_agent_prompt(
                         question=questions[sample_i],
                         think=plan["think"],
@@ -560,16 +587,20 @@ class FixedParallelO1:
                         docs=docs,
                     )
                     refine_prompts.append(refine_prompt)
-                    refine_meta.append((sample_i, plan["path_id"],
-                                        plan["think"],
-                                        plan["search_query"],
-                                        selected_doc_ids))
+                    refine_meta.append(
+                        (
+                            sample_i,
+                            plan["path_id"],
+                            plan["think"],
+                            plan["search_query"],
+                            selected_doc_ids,
+                        )
+                    )
 
             iteration_timing["refine_prompt_count"] = len(refine_prompts)
 
             phase4_started_ns = self._now_ns()
-            refine_outputs = self._generate_text_batch(refine_prompts,
-                                                       refine_config)
+            refine_outputs = self._generate_text_batch(refine_prompts, refine_config)
             phase4_ms = self._ns_to_ms(self._now_ns() - phase4_started_ns)
             batch_phase_totals["phase4_refine_ms"] += phase4_ms
             iteration_timing["phase4_refine_ms"] = phase4_ms
@@ -591,19 +622,24 @@ class FixedParallelO1:
             ]
 
             for idx, refine_output in enumerate(refine_outputs):
-                sample_i, path_id, think, search_query, selected_doc_ids = refine_meta[idx]
+                sample_i, path_id, think, search_query, selected_doc_ids = refine_meta[
+                    idx
+                ]
                 info = self._parse_info(refine_output)
 
-                refined_paths_by_sample[sample_i].append({
-                    "path_id": path_id,
-                    "think": think,
-                    "search_query": search_query,
-                    "refined_information": info,
-                    "selected_doc_ids": selected_doc_ids,
-                })
+                refined_paths_by_sample[sample_i].append(
+                    {
+                        "path_id": path_id,
+                        "think": think,
+                        "search_query": search_query,
+                        "refined_information": info,
+                        "selected_doc_ids": selected_doc_ids,
+                    }
+                )
                 refine_prompts_by_sample[sample_i].append(refine_prompts[idx])
                 retrieved_by_sample[sample_i].append(
-                    docs_map.get((sample_i, path_id), []))
+                    docs_map.get((sample_i, path_id), [])
+                )
 
             for sample_i in active_indices:
                 refined_paths = refined_paths_by_sample[sample_i]
@@ -611,17 +647,23 @@ class FixedParallelO1:
                     continue
 
                 results[sample_i]["retrieved_docs"].append(
-                    retrieved_by_sample[sample_i])
+                    retrieved_by_sample[sample_i]
+                )
                 results[sample_i]["refine_prompts"].append(
-                    [self._prompt_to_text(p)
-                     for p in refine_prompts_by_sample[sample_i]])
+                    [
+                        self._prompt_to_text(p)
+                        for p in refine_prompts_by_sample[sample_i]
+                    ]
+                )
                 results[sample_i]["refined_paths"].append(refined_paths)
 
                 dialogue_states[sample_i] += self._build_parallel_appendix(
-                    refined_paths)
+                    refined_paths
+                )
 
             iteration_timing["iteration_total_ms"] = self._ns_to_ms(
-                self._now_ns() - iteration_started_ns)
+                self._now_ns() - iteration_started_ns
+            )
             iteration_timings.append(iteration_timing)
 
         phase5_started_ns = self._now_ns()

@@ -22,12 +22,12 @@ python run_adaptive_parallel_o1.py \
   --navigator_agent_openai_base_url "$NAVIGATOR_AGENT_OPENAI_BASE_URL" \
   --navigator_agent_openai_api_key "$NAVIGATOR_AGENT_OPENAI_API_KEY" \
   --navigator_agent_model "$MODEL" \
-  --docs_per_query 5 \
   --navigator_agent_max_tokens 1024 \
   --navigator_agent_temperature 0.8 \
   --navigator_agent_top_p 0.9 \
   --navigator_agent_model_path /home/zdw2200170271/llm/models/Qwen3-32B \
   --navigator_agent_use_chat_template \
+  --navigator_agent_enable_thinking \
   --path_agent_max_tokens 512 \
   --path_agent_temperature 0.8 \
   --path_agent_top_p 0.9 \
@@ -39,12 +39,14 @@ python run_adaptive_parallel_o1.py \
   --global_refine_agent_temperature 0.8 \
   --global_refine_agent_top_p 0.9 \
   --global_refine_agent_use_chat_template \
+  --global_refine_agent_enable_thinking \
   --max_iterations 5 \
   --num_samples "$NUM_SAMPLES" \
   --path_agent_model "$MODEL" \
   --path_agent_model_path /home/zdw2200170271/llm/models/Qwen3-32B \
   --batch_size 10 \
-  --path_agent_use_chat_template
+  --path_agent_use_chat_template \
+  --path_agent_enable_thinking
   # --debug
 
 

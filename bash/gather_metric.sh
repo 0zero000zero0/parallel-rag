@@ -1,4 +1,4 @@
 python gather_metric.py \
- --method  parallel-rag \
+ --method  parallel-search \
  --model Qwen3-32B \
  --outputs_root outputs

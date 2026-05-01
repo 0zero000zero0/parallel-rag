@@ -45,15 +45,9 @@ for dataset in "${DATASETS[@]}"; do
   result_dir="${dataset_output_root}/${next_index}"
   result_file="${result_dir}/${dataset}.jsonl"
 
-<<<<<<< HEAD
   echo "Processing Dataset: ${dataset}"
   echo "Output Dir: ${result_dir}"
 
-=======
-  echo "=================================================="
-  echo "Processing Dataset: ${dataset}"
-  echo "Output Dir: ${result_dir}"
->>>>>>> gitcode/main
 
   python run_naive_rag.py \
     --input_file "$input_file" \
@@ -63,7 +57,6 @@ for dataset in "${DATASETS[@]}"; do
     --openai_base_url "$OPENAI_BASE_URL" \
     --openai_api_key "$OPENAI_API_KEY" \
     --model "$MODEL" \
-    --docs_per_query 5 \
     --generation_max_tokens 1024 \
     --generation_temperature 0.8 \
     --generation_top_p 0.9 \
@@ -87,3 +80,9 @@ for dataset in "${DATASETS[@]}"; do
 done
 
 echo "All datasets done."
+
+
+python gather_metric.py \
+ --method naive-rag \
+ --model Qwen3-32B \
+ --outputs_root outputs

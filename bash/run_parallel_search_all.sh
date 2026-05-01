@@ -9,10 +9,9 @@ NAVIGATOR_AGENT_OPENAI_API_KEY="TEST"
 NAVIGATOR_AGENT_MODEL="Qwen3-32B"
 NAVIGATOR_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
 
-GLOBAL_REFINE_AGENT_OPENAI_BASE_URL="http://127.0.0.1:8000/"
-GLOBAL_REFINE_AGENT_OPENAI_API_KEY="TEST"
-GLOBAL_REFINE_AGENT_MODEL="Qwen3-32B"
-GLOBAL_REFINE_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
+
+TEMPERATURE=0.6
+TOP_P=0.8
 
 NUM_SAMPLES=1024
 DATASETS=(
@@ -35,7 +34,7 @@ for DATASET in "${DATASETS[@]}"; do
     continue
   fi
 
-  DATASET_OUTPUT_ROOT="./outputs/parallel-rag/${NAVIGATOR_AGENT_MODEL}/${DATASET}"
+  DATASET_OUTPUT_ROOT="./outputs/parallel-search/${NAVIGATOR_AGENT_MODEL}/${DATASET}"
   mkdir -p "$DATASET_OUTPUT_ROOT"
 
   MAX_INDEX="$(find "$DATASET_OUTPUT_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | grep -E '^[0-9]+$' | sort -n | tail -1 || true)"
@@ -52,7 +51,7 @@ for DATASET in "${DATASETS[@]}"; do
   echo "Processing Dataset: ${DATASET}"
   echo "Output Dir: ${RESULT_DIR}"
 
-  python run_parallel_rag.py \
+  python run_parallel_search.py \
     --input_file "$INPUT_FILE" \
     --result_file "$RESULT_FILE" \
     --batch_size 512 \
@@ -63,20 +62,12 @@ for DATASET in "${DATASETS[@]}"; do
     --navigator_agent_model "$NAVIGATOR_AGENT_MODEL" \
     --navigator_agent_model_path "$NAVIGATOR_AGENT_MODEL_PATH" \
     --navigator_agent_max_tokens 1024 \
-    --navigator_agent_temperature 0.6 \
-    --navigator_agent_top_p 0.9 \
+    --navigator_agent_temperature ${TEMPERATURE} \
+    --navigator_agent_top_p ${TOP_P} \
     --navigator_agent_use_chat_template \
-    --global_refine_agent_openai_base_url "$GLOBAL_REFINE_AGENT_OPENAI_BASE_URL" \
-    --global_refine_agent_openai_api_key "$GLOBAL_REFINE_AGENT_OPENAI_API_KEY" \
-    --global_refine_agent_model "$GLOBAL_REFINE_AGENT_MODEL" \
-    --global_refine_agent_model_path "$GLOBAL_REFINE_AGENT_MODEL_PATH" \
-    --global_refine_agent_max_tokens 1024 \
-    --global_refine_agent_temperature 0.6 \
-    --global_refine_agent_top_p 0.9 \
-    --global_refine_agent_use_chat_template \
     --synthesize_max_tokens 1024 \
-    --synthesize_temperature 0.6 \
-    --synthesize_top_p 0.9 \
+    --synthesize_temperature ${TEMPERATURE} \
+    --synthesize_top_p ${TOP_P} \
     --max_iterations 5 \
     --num_samples "$NUM_SAMPLES"
 
@@ -91,7 +82,8 @@ for DATASET in "${DATASETS[@]}"; do
 done
 
 echo "All datasets done."
+
 python gather_metric.py \
- --method  parallel-rag \
- --model Qwen3-32B \
+ --method parallel-search \
+ --model "${NAVIGATOR_AGENT_MODEL}" \
  --outputs_root outputs

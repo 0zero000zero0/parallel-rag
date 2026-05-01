@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from tqdm import tqdm
 
 from src.search_o1 import SearchO1
-from src.utils import (build_output_dir, create_tensorboard_writer, percentile,
+from src.utils import (build_output_dir,  percentile,
                        read_jsonlines, write_jsonlines)
 
 
@@ -37,7 +37,6 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Render chat messages via tokenizer.apply_chat_template before /v1/completions")
 
     parser.add_argument("--max_search_limit", type=int, default=5)
-    parser.add_argument("--docs_per_query", type=int, default=5)
 
     parser.add_argument("--search_max_tokens", type=int, default=512)
     parser.add_argument("--search_temperature", type=float, default=1.0)
@@ -80,7 +79,6 @@ def main() -> None:
     batch_timings: List[Dict[str, Any]] = []
     batch_size = max(1, int(args.batch_size))
     batch_starts = range(0, len(samples), batch_size)
-    writer = create_tensorboard_writer(output_dir / "tensorboard")
 
     if args.debug:
         import debugpy
@@ -136,14 +134,6 @@ def main() -> None:
             "error": batch_error,
         })
         batch_timings.append(batch_timing)
-
-        if writer is not None:
-            writer.add_scalar("batch/batch_wall_ms", batch_wall_ms, batch_idx)
-            phase_totals = batch_timing.get("phase_totals_ms", {})
-            for phase_name, phase_ms in phase_totals.items():
-                writer.add_scalar(f"batch/{phase_name}",
-                                  float(phase_ms),
-                                  batch_idx)
 
         for (idx, question, golden_answers), result in zip(validated_items,
                                                            batch_results):
@@ -202,22 +192,6 @@ def main() -> None:
         },
         "batch_timings": batch_timings,
     }
-
-    if writer is not None:
-        writer.add_scalar("run/read_data_ms",
-                          timing_summary["read_data_ms"], 0)
-        writer.add_scalar("run/pipeline_total_ms",
-                          timing_summary["pipeline_total_ms"], 0)
-        writer.add_scalar("run/write_result_ms",
-                          timing_summary["write_result_ms"], 0)
-        writer.add_scalar("run/total_run_ms",
-                          timing_summary["total_run_ms"], 0)
-        writer.add_scalar("sample/total_ms_avg",
-                          timing_summary["sample_timing_stats_ms"]["avg"], 0)
-        writer.add_scalar("sample/total_ms_p95",
-                          timing_summary["sample_timing_stats_ms"]["p95"], 0)
-        writer.flush()
-        writer.close()
 
     timing_output_path = output_dir / "time.json"
     with timing_output_path.open("w", encoding="utf-8") as f:
