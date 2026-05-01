@@ -646,22 +646,32 @@ class AdaptiveParallelO1(PromptedGenerationBase):
             else "No documents in the pooled knowledge base."
         )
 
+        # system_prompt = (
+        #     "You are the Global Refine Agent.\n"
+        #     "You are tasked with reading and analyzing document pool based on the following inputs: the original question, the reasoning steps by navigator agent, abstract search directions, concrete search queries, and a global document pool with provenance metadata.\n"
+        #     "Your objective is to extract relevant and helpful information for concrete search queries from the searched document pool and seamlessly integrate this information into the navigator agent's Reasoning steps to continue reasoning for the original question.  Guidelines:\n"
+        #     "1. Analyze the searched document pool:\n"
+        #     "  - Carefully review the content of each searched web page.\n"
+        #     "  - Identify factual information that is relevant to  concrete search queries and can aid in the reasoning process for the original question.\n"
+        #     "2. Extract Relevant Information:\n"
+        #     "  - Select the information from the Searched document pool that directly contributes to advancing the navigator agent's reasoning steps.\n"
+        #     "  - Ensure that the extracted information is accurate and relevant.\n"
+        #     "3. Output Format: "
+        #     "  - If the document pool provide ALL THE helpful information for concrete search queries: Present the information beginning with `Helpful Information` as shown below.\n"
+        #     "Helpful Information: [Helpful information here]\n"
+        #     "  - If the document pool do not provide any helpful information for concrete search queries: Output the following text.\n"
+        #     "No helpful information found.\n"
+        #     "Now the inputs information as follows:"
+        # )
         system_prompt = (
-            "You are the Global Refine Agent.\n"
+            "You are a helpful assistant.\n"
             "You are tasked with reading and analyzing document pool based on the following inputs: the original question, the reasoning steps by navigator agent, abstract search directions, concrete search queries, and a global document pool with provenance metadata.\n"
-            "Your objective is to extract relevant and helpful information for concrete search queries from the searched document pool and seamlessly integrate this information into the navigator agent's Reasoning steps to continue reasoning for the original question.  Guidelines:\n"
-            "1. Analyze the searched document pool:\n"
-            "  - Carefully review the content of each searched web page.\n"
-            "  - Identify factual information that is relevant to  concrete search queries and can aid in the reasoning process for the original question.\n"
-            "2. Extract Relevant Information:\n"
-            "  - Select the information from the Searched document pool that directly contributes to advancing the navigator agent's reasoning steps.\n"
-            "  - Ensure that the extracted information is accurate and relevant.\n"
-            "3. Output Format: "
-            "  - If the document pool provide ALL THE helpful information for concrete search queries: Present the information beginning with `Helpful Information` as shown below.\n"
+            "Your objective is to extract relevant and helpful information for concrete search queries from the searched document pool and seamlessly integrate this information into the navigator agent's Reasoning steps to continue reasoning for the original question"
+            "If the document pool provide helpful information for concrete search queries: Present the information beginning with `Helpful Information` as shown below."
             "Helpful Information: [Helpful information here]\n"
-            "  - If the document pool do not provide any helpful information for concrete search queries: Output the following text.\n"
+            "If the document pool do not provide any helpful information for concrete search queries: Output the following text.\n"
             "No helpful information found.\n"
-            "Now the inputs information as follows:"
+            "Now  the following inputs are:"
         )
         user_prompt = "\n\n".join(
             [
@@ -676,7 +686,7 @@ class AdaptiveParallelO1(PromptedGenerationBase):
                 self._format_external_context(
                     "Global Searched Document Pool", docs_block
                 ),
-                "Now you should analyze each searched document and find ALL THE helpful information based on the original question, abstract search directions, concrete queries, and a global searched document pool with provenance metadata.",
+                "Now you should analyze each searched document and find all the helpful information based on the original question, abstract search directions, concrete queries, and a global searched document pool with provenance metadata.",
             ]
         )
         return self._format_prompt_by_template(

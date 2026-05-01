@@ -20,7 +20,7 @@ PATH_AGENT_MODEL="Qwen3-32B"
 PATH_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
 
 TEMPERATURE=0.8
-TOP_P=0.8
+TOP_P=0.95
 
 NUM_SAMPLES=1024
 DATASETS=(
@@ -30,10 +30,10 @@ DATASETS=(
   # musique
   # gpqa
 
-  # popqa
+  popqa
   nq
-  # triviaqa
-  # ambigqa
+  triviaqa
+  ambigqa
 )
 
 for dataset in "${DATASETS[@]}"; do

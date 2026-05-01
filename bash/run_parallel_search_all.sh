@@ -10,16 +10,16 @@ NAVIGATOR_AGENT_MODEL="Qwen3-32B"
 NAVIGATOR_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
 
 
-TEMPERATURE=0.8
+TEMPERATURE=0.6
 TOP_P=0.8
 
 NUM_SAMPLES=1024
 DATASETS=(
-  bamboogle
-  2wikimultihopqa
-  hotpotqa
-  musique
-  gpqa
+  # bamboogle
+  # 2wikimultihopqa
+  # hotpotqa
+  # musique
+  # gpqa
   nq
   popqa
   triviaqa
@@ -82,3 +82,8 @@ for DATASET in "${DATASETS[@]}"; do
 done
 
 echo "All datasets done."
+
+python gather_metric.py \
+ --method parallel-search\
+ --model "${NAVIGATOR_AGENT_MODEL}" \
+ --outputs_root outputs
