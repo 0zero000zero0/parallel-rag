@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
-RETRIEVER_BASE_URL="http://127.0.01:9100"
+DATA_ROOT="/mnt1/zhangdingwen/llm/datasets/"
+RETRIEVER_BASE_URL="http://127.0.01:9000"
 # local
 OPENAI_BASE_URL="http://127.0.01:8000/"
 OPENAI_API_KEY="TEST"
@@ -10,16 +10,16 @@ OPENAI_API_KEY="TEST"
 MODEL="Qwen3-32B"
 NUM_SAMPLES=1024
 DATASETS=(
-  # bamboogle
-  # 2wikimultihopqa
-  # hotpotqa
-  # musique
-  # nq
-  # popqa
-  # triviaqa
-  # ambigqa
-  # gpqa
-  gaia
+  bamboogle
+  2wikimultihopqa
+  hotpotqa
+  musique
+  nq
+  popqa
+  triviaqa
+  ambigqa
+  gpqa
+  # gaia
 )
 
 for dataset in "${DATASETS[@]}"; do
@@ -52,28 +52,21 @@ for dataset in "${DATASETS[@]}"; do
     --openai_base_url "$OPENAI_BASE_URL" \
     --openai_api_key "$OPENAI_API_KEY" \
     --model "$MODEL" \
-    --num_parallel 3 \
-    --trigger_max_tokens 512 \
+    --num_parallel 5 \
+    --trigger_max_tokens 1024 \
     --trigger_temperature 0.8 \
     --trigger_top_p 0.8 \
-    --path_max_tokens 512 \
+    --path_max_tokens 1024 \
     --path_temperature 0.8 \
     --path_top_p 0.8 \
     --refine_max_tokens 1024 \
     --refine_temperature 0.8 \
     --refine_top_p 0.8 \
     --max_iterations 5 \
-    --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
+    --model_path ~/llm/models/Qwen3-32B \
     --num_samples "$NUM_SAMPLES"
 
-<<<<<<< HEAD
-=======
-  if [[ ! -f "$result_file" ]]; then
-    echo "ERROR: result file not found after run_parallel_o1.py: $result_file" >&2
-    exit 1
-  fi
 
->>>>>>> gitcode/main
   python evaluate.py \
     --result_file "$result_file" \
     --dataset_name "$dataset" \
