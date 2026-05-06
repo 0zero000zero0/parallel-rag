@@ -19,14 +19,14 @@ TOP_P=0.95
 
 NUM_SAMPLES=1024
 DATASETS=(
-  bamboogle
-  2wikimultihopqa
-  hotpotqa
-  musique
-  gpqa
-  popqa
-  nq
-  triviaqa
+  # bamboogle
+  # 2wikimultihopqa
+  # hotpotqa
+  # musique
+  # gpqa
+  # popqa
+  # nq
+  # triviaqa
   ambigqa
 )
 

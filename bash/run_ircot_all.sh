@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/mnt1/zhangdingwen/llm/datasets/"
-RETRIEVER_BASE_URL="http://127.0.01:9000"
-# local
-OPENAI_BASE_URL="http://127.0.01:8000/"
+DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
+RETRIEVER_BASE_URL="http://127.0.0.1:9100"
+OPENAI_BASE_URL="http://127.0.0.1:8000/"
 OPENAI_API_KEY="TEST"
 
 MODEL="Qwen3-32B"
@@ -17,15 +16,20 @@ DATASETS=(
   # nq
   # popqa
   # triviaqa
-  ambigqa
-  gpqa
-  # gaia
+  # ambigqa
+  # gpqa
+  gaia
 )
 
 for dataset in "${DATASETS[@]}"; do
   input_file="${DATA_ROOT}/${dataset}/test.jsonl"
 
-  dataset_output_root="./outputs/fixed-parallel-o1/${MODEL}/${dataset}"
+  if [[ ! -f "$input_file" ]]; then
+    echo " Skip ${dataset}: input file not found -> $input_file"
+    continue
+  fi
+
+  dataset_output_root="./outputs/ircot/${MODEL}/${dataset}"
   mkdir -p "$dataset_output_root"
 
   max_index="$(find "$dataset_output_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | grep -E '^[0-9]+$' | sort -n | tail -1 || true)"
@@ -44,7 +48,7 @@ for dataset in "${DATASETS[@]}"; do
   echo "Processing Dataset: ${dataset}"
   echo "Output Dir: ${result_dir}"
 
-  python run_fixed_parallel_o1.py \
+  python run_ircot.py \
     --input_file "$input_file" \
     --batch_size 512 \
     --retriever_base_url "$RETRIEVER_BASE_URL" \
@@ -52,20 +56,19 @@ for dataset in "${DATASETS[@]}"; do
     --openai_base_url "$OPENAI_BASE_URL" \
     --openai_api_key "$OPENAI_API_KEY" \
     --model "$MODEL" \
-    --num_parallel 5 \
-    --trigger_max_tokens 1024 \
-    --trigger_temperature 0.8 \
-    --trigger_top_p 0.8 \
-    --path_max_tokens 1024 \
-    --path_temperature 0.8 \
-    --path_top_p 0.8 \
-    --refine_max_tokens 1024 \
-    --refine_temperature 0.8 \
-    --refine_top_p 0.8 \
-    --max_iterations 5 \
-    --model_path ~/llm/models/Qwen3-32B \
-    --num_samples "$NUM_SAMPLES"
+    --generation_max_tokens 1024 \
+    --generation_temperature 0.8 \
+    --generation_top_p 0.9 \
+    --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
+    --max_search_limit 5 \
+    --max_iterations 10 \
+    --num_samples "$NUM_SAMPLES" \
+    --use_chat_template
 
+  if [[ ! -f "$result_file" ]]; then
+    echo "ERROR: result file not found after run_ircot.py: $result_file" >&2
+    exit 1
+  fi
 
   python evaluate.py \
     --result_file "$result_file" \
@@ -79,8 +82,7 @@ done
 
 echo "All datasets done."
 
-
 python gather_metric.py \
- --method  fixed-parallel-o1 \
+ --method ircot \
  --model Qwen3-32B \
  --outputs_root outputs
