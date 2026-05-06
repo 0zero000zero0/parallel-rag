@@ -2,7 +2,7 @@ import hashlib
 import re
 import time
 from types import SimpleNamespace
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from src.clients import (
     BatchSearchDocs,
@@ -54,23 +54,23 @@ def _load_tokenizer(model_path: str) -> Any:
 class PooledDocument(TypedDict):
     doc_id: str
     contents: str
-    source_query_ids: List[str]
-    source_queries: List[str]
+    source_query_ids: list[str]
+    source_queries: list[str]
 
 
 class ParallelRAGResult(TypedDict):
     query: str
     max_iterations: int
     executed_iterations: int
-    navigator_agent_prompts: List[str]
-    navigator_agent_thoughts: List[str]
-    search_queries: List[List[str]]
-    retrieved_docs: List[BatchSearchDocs]
-    pooled_docs: List[List[PooledDocument]]
-    refine_prompts: List[List[str]]
-    global_refinements: List[str]
+    navigator_agent_prompts: list[str]
+    navigator_agent_thoughts: list[str]
+    search_queries: list[list[str]]
+    retrieved_docs: list[BatchSearchDocs]
+    pooled_docs: list[list[PooledDocument]]
+    refine_prompts: list[list[str]]
+    global_refinements: list[str]
     final_answer: str
-    timing: Dict[str, Any]
+    timing: dict[str, Any]
 
 
 class ParallelRAG(PromptedGenerationBase):
@@ -88,7 +88,7 @@ class ParallelRAG(PromptedGenerationBase):
         synthesize_max_tokens: int = 768,
         synthesize_temperature: float = 0.3,
         synthesize_top_p: float = 0.9,
-        stop_tokens: List[str] | None = None,
+        stop_tokens: list[str] | None = None,
         navigator_agent_use_chat_template: bool = False,
         navigator_agent_tokenizer: Any = None,
         global_refine_agent_use_chat_template: bool = False,
@@ -130,7 +130,7 @@ class ParallelRAG(PromptedGenerationBase):
                 "global_refine_agent_tokenizer is required when global_refine_agent_use_chat_template=True"
             )
 
-        self.latest_batch_timing: Dict[str, Any] = {}
+        self.latest_batch_timing: dict[str, Any] = {}
 
     @classmethod
     def from_args(cls, args) -> "ParallelRAG":
@@ -310,8 +310,8 @@ class ParallelRAG(PromptedGenerationBase):
             {"role": "user", "content": user_prompt},
         ]
 
-    def _extract_searches(self, text: str) -> List[str]:
-        searches: List[str] = []
+    def _extract_searches(self, text: str) -> list[str]:
+        searches: list[str] = []
         search_query_blocks = SEARCH_QUERIES_TAG_PATTERN.findall(text)
         scopes = search_query_blocks if search_query_blocks else [text]
 
@@ -331,12 +331,12 @@ class ParallelRAG(PromptedGenerationBase):
 
     def _generate_text_batch(
         self,
-        prompts: List[Any],
+        prompts: list[Any],
         config: SimpleNamespace,
         llm_client: OpenAIClient,
         tokenizer: Any = None,
         use_chat_template: bool | None = None,
-    ) -> List[str]:
+    ) -> list[str]:
         if not prompts:
             return []
 
@@ -355,7 +355,7 @@ class ParallelRAG(PromptedGenerationBase):
         )
 
     def _build_navigator_agent_prompt(
-        self, question: str, historical_refinements: List[str], use_chat_template: bool
+        self, question: str, historical_refinements: list[str], use_chat_template: bool
     ) -> Any:
         history_block = (
             "\n\n".join(
@@ -393,8 +393,8 @@ class ParallelRAG(PromptedGenerationBase):
         self,
         question: str,
         navigator_agent_think: str,
-        search_queries: List[str],
-        pooled_docs: List[PooledDocument],
+        search_queries: list[str],
+        pooled_docs: list[PooledDocument],
         use_chat_template: bool,
     ) -> Any:
         query_block = (
@@ -462,7 +462,7 @@ class ParallelRAG(PromptedGenerationBase):
         return f"\n<information>\n{report}\n</information>\n"
 
     def _build_final_answer_prompt(
-        self, question: str, historical_refinements: List[str], use_chat_template: bool
+        self, question: str, historical_refinements: list[str], use_chat_template: bool
     ) -> Any:
         history_block = (
             "\n\n".join(
@@ -500,10 +500,10 @@ class ParallelRAG(PromptedGenerationBase):
 
     def _pool_documents(
         self,
-        search_queries: List[str],
-        docs_map: dict[tuple[int, int], List[RetrieverDocument]],
+        search_queries: list[str],
+        docs_map: dict[tuple[int, int], list[RetrieverDocument]],
         sample_i: int,
-    ) -> List[PooledDocument]:
+    ) -> list[PooledDocument]:
         pooled_by_key: dict[str, PooledDocument] = {}
         for query_id, query in enumerate(search_queries, start=1):
             docs = docs_map.get((sample_i, query_id), [])
@@ -536,11 +536,11 @@ class ParallelRAG(PromptedGenerationBase):
         return duration_ns / 1_000_000.0
 
     def _init_batch_runtime(
-        self, questions: List[str], max_iterations: int
-    ) -> tuple[List[bool], List[ParallelRAGResult], List[List[str]]]:
+        self, questions: list[str], max_iterations: int
+    ) -> tuple[list[bool], list[ParallelRAGResult], list[list[str]]]:
         completed = [False] * len(questions)
 
-        results: List[ParallelRAGResult] = [
+        results: list[ParallelRAGResult] = [
             {
                 "query": q,
                 "max_iterations": max_iterations,
@@ -566,27 +566,27 @@ class ParallelRAG(PromptedGenerationBase):
             for q in questions
         ]
 
-        refinement_histories: List[List[str]] = [[] for _ in questions]
+        refinement_histories: list[list[str]] = [[] for _ in questions]
         return completed, results, refinement_histories
 
     def run(self, question: str, max_iterations: int = 4) -> ParallelRAGResult:
         return self.run_batch([question], max_iterations=max_iterations)[0]
 
     def run_batch(
-        self, questions: List[str], max_iterations: int = 5
-    ) -> List[ParallelRAGResult]:
+        self, questions: list[str], max_iterations: int = 5
+    ) -> list[ParallelRAGResult]:
         if not questions:
             return []
 
         run_batch_started_ns = self._now_ns()
-        batch_phase_totals: Dict[str, float] = {
+        batch_phase_totals: dict[str, float] = {
             "phase1_navigator_ms": 0.0,
             "phase2_retrieval_ms": 0.0,
             "phase2_pooling_ms": 0.0,
             "phase3_refine_ms": 0.0,
             "phase4_synthesize_ms": 0.0,
         }
-        iteration_timings: List[Dict[str, Any]] = []
+        iteration_timings: list[dict[str, Any]] = []
 
         completed, results, refinement_histories = self._init_batch_runtime(
             questions=questions, max_iterations=max_iterations
@@ -605,7 +605,7 @@ class ParallelRAG(PromptedGenerationBase):
 
         for iteration_idx in range(max_iterations):
             iteration_started_ns = self._now_ns()
-            iteration_timing: Dict[str, Any] = {
+            iteration_timing: dict[str, Any] = {
                 "iteration": iteration_idx + 1,
                 "active_samples": 0,
                 "search_query_count": 0,
@@ -647,9 +647,9 @@ class ParallelRAG(PromptedGenerationBase):
             for sample_i in active_indices:
                 results[sample_i]["timing"]["phase1_navigator_ms"] += phase1_share
 
-            sample_search_queries: List[List[str]] = [[] for _ in range(len(questions))]
-            flat_queries: List[str] = []
-            query_meta: List[tuple[int, int]] = []
+            sample_search_queries: list[list[str]] = [[] for _ in range(len(questions))]
+            flat_queries: list[str] = []
+            query_meta: list[tuple[int, int]] = []
 
             for local_i, sample_i in enumerate(active_indices):
                 navigator_output = navigator_outputs[local_i]
@@ -704,12 +704,12 @@ class ParallelRAG(PromptedGenerationBase):
                         retrieval_share
                     )
 
-            docs_map: dict[tuple[int, int], List[RetrieverDocument]] = {}
+            docs_map: dict[tuple[int, int], list[RetrieverDocument]] = {}
             for idx, docs in enumerate(flat_docs):
                 docs_map[query_meta[idx]] = docs
 
-            refine_prompts: List[Any] = []
-            refine_meta: List[tuple[int, str]] = []
+            refine_prompts: list[Any] = []
+            refine_meta: list[tuple[int, str]] = []
 
             phase2_pooling_started_ns = self._now_ns()
             for sample_i in active_indices:

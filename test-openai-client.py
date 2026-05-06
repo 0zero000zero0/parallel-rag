@@ -1,14 +1,14 @@
 import json
 from types import SimpleNamespace
-from typing import Any, Dict, List
+from typing import Any
 
 from transformers import AutoTokenizer
 
 from src.clients import OpenAIClient
 
 
-def parse_headers(header_args: List[str]) -> Dict[str, str]:
-    headers: Dict[str, str] = {}
+def parse_headers(header_args: list[str]) -> dict[str, str]:
+    headers: dict[str, str] = {}
     for item in header_args:
         if "=" not in item:
             raise ValueError(f"Invalid header format: {item!r}. Use KEY=VALUE")
@@ -17,16 +17,16 @@ def parse_headers(header_args: List[str]) -> Dict[str, str]:
     return headers
 
 
-def load_chat_messages(params: Dict[str, Any]) -> List[Dict[str, str]]:
+def load_chat_messages(params: dict[str, Any]) -> list[dict[str, str]]:
     messages_json = params.get("messages_json")
     if messages_json:
-        with open(messages_json, "r", encoding="utf-8") as f:
+        with open(messages_json, encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, list):
             raise ValueError("messages_json must contain a list of messages")
         return data
 
-    messages: List[Dict[str, str]] = []
+    messages: list[dict[str, str]] = []
     if params.get("system"):
         messages.append({"role": "system", "content": params["system"]})
     messages.append({"role": "user", "content": params["user"]})
@@ -42,7 +42,7 @@ def to_chat_prompt(system_content: str, user_content: str) -> Any:
 
 tokenizer = AutoTokenizer.from_pretrained("/home/zdw2200170271/llm/models/Qwen3-32B")
 
-PARAMS: Dict[str, Any] = {
+PARAMS: dict[str, Any] = {
     "base_url": "http://127.0.0.1:8000",
     "model": "Qwen3-32B",
     "api_key": "TEST",

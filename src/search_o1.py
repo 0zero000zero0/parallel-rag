@@ -1,7 +1,7 @@
 import re
 import time
 from types import SimpleNamespace
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from src.clients import (
     BatchSearchDocs,
@@ -30,7 +30,7 @@ ANSWER_TAG_PATTERN = re.compile(
 class SearchStep(TypedDict):
     iteration: int
     search_query: str
-    selected_doc_ids: List[str]
+    selected_doc_ids: list[str]
     refined_information: str
 
 
@@ -40,14 +40,14 @@ class SearchO1Result(TypedDict):
     max_search_limit: int
     executed_iterations: int
     search_count: int
-    prompts: List[str]
-    raw_outputs: List[str]
-    search_steps: List[SearchStep]
+    prompts: list[str]
+    raw_outputs: list[str]
+    search_steps: list[SearchStep]
     retrieved_docs: BatchSearchDocs
-    refine_prompts: List[str]
-    refine_outputs: List[str]
+    refine_prompts: list[str]
+    refine_outputs: list[str]
     final_answer: str
-    timing: Dict[str, Any]
+    timing: dict[str, Any]
 
 
 class SearchO1(PromptedGenerationBase):
@@ -62,7 +62,7 @@ class SearchO1(PromptedGenerationBase):
         refine_max_tokens: int = 512,
         refine_temperature: float = 0.7,
         refine_top_p: float = 0.8,
-        stop_tokens: List[str] | None = None,
+        stop_tokens: list[str] | None = None,
         use_chat_template: bool = False,
         tokenizer: Any = None,
     ):
@@ -83,7 +83,7 @@ class SearchO1(PromptedGenerationBase):
         self.refine_max_tokens = refine_max_tokens
         self.refine_temperature = refine_temperature
         self.refine_top_p = refine_top_p
-        self.latest_batch_timing: Dict[str, Any] = {}
+        self.latest_batch_timing: dict[str, Any] = {}
 
     @classmethod
     def from_args(cls, args) -> "SearchO1":
@@ -150,7 +150,7 @@ class SearchO1(PromptedGenerationBase):
         return self.format_prompt(system_prompt, user_prompt)
 
     def _build_refine_agent_prompt(
-        self, prev_reasoning: str, search_query: str, docs: List[RetrieverDocument]
+        self, prev_reasoning: str, search_query: str, docs: list[RetrieverDocument]
     ) -> Any:
         docs_block = "\n\n".join(
             [
@@ -213,8 +213,8 @@ class SearchO1(PromptedGenerationBase):
         return f"\n{BEGIN_SEARCH_RESULT}\n{info}\n{END_SEARCH_RESULT}\n"
 
     def _generate_text_batch(
-        self, prompts: List[Any], config: SimpleNamespace
-    ) -> List[str]:
+        self, prompts: list[Any], config: SimpleNamespace
+    ) -> list[str]:
         if not prompts:
             return []
         if not self.use_chat_template:
@@ -236,26 +236,26 @@ class SearchO1(PromptedGenerationBase):
         return self.run_batch([question], max_iterations=max_iterations)[0]
 
     def run_batch(
-        self, questions: List[str], max_iterations: int = 15
-    ) -> List[SearchO1Result]:
+        self, questions: list[str], max_iterations: int = 15
+    ) -> list[SearchO1Result]:
         if not questions:
             return []
 
         run_batch_started_ns = self._now_ns()
-        batch_phase_totals: Dict[str, float] = {
+        batch_phase_totals: dict[str, float] = {
             "phase1_search_ms": 0.0,
             "phase2_retrieval_ms": 0.0,
             "phase3_refine_ms": 0.0,
             "phase4_finalize_ms": 0.0,
         }
-        iteration_timings: List[Dict[str, Any]] = []
+        iteration_timings: list[dict[str, Any]] = []
 
         prompts = [self._build_main_agent_prompt(q) for q in questions]
         completed = [False] * len(questions)
         search_counts = [0] * len(questions)
-        executed_queries: List[set[str]] = [set() for _ in questions]
+        executed_queries: list[set[str]] = [set() for _ in questions]
 
-        results: List[SearchO1Result] = [
+        results: list[SearchO1Result] = [
             {
                 "query": q,
                 "max_iterations": max_iterations,
@@ -294,7 +294,7 @@ class SearchO1(PromptedGenerationBase):
 
         for iteration in range(1, max_iterations + 1):
             iteration_started_ns = self._now_ns()
-            iteration_timing: Dict[str, Any] = {
+            iteration_timing: dict[str, Any] = {
                 "iteration": iteration,
                 "active_samples": 0,
                 "retrieval_query_count": 0,
@@ -320,8 +320,8 @@ class SearchO1(PromptedGenerationBase):
             for sample_i in active_indices:
                 results[sample_i]["timing"]["phase1_search_ms"] += phase1_share
 
-            queries_to_search: List[str] = []
-            query_meta: List[tuple[int, str]] = []
+            queries_to_search: list[str] = []
+            query_meta: list[tuple[int, str]] = []
 
             for local_i, sample_i in enumerate(active_indices):
                 output = main_outputs[local_i]
@@ -403,8 +403,8 @@ class SearchO1(PromptedGenerationBase):
                 for sample_i in phase2_samples:
                     results[sample_i]["timing"]["phase2_retrieval_ms"] += phase2_share
 
-            refine_prompts: List[str] = []
-            refine_meta: List[tuple[int, str, List[str], List[RetrieverDocument]]] = []
+            refine_prompts: list[str] = []
+            refine_meta: list[tuple[int, str, list[str], list[RetrieverDocument]]] = []
             for idx, docs in enumerate(batch_docs):
                 sample_i, search_query = query_meta[idx]
                 selected_docs = docs

@@ -1,7 +1,7 @@
 import re
 import time
 from types import SimpleNamespace
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from src.clients import (
     BatchSearchDocs,
@@ -29,13 +29,13 @@ class ParallelSearchResult(TypedDict):
     query: str
     max_iterations: int
     executed_iterations: int
-    navigator_agent_prompts: List[str]
-    navigator_agent_thoughts: List[str]
-    search_queries: List[List[str]]
-    retrieved_docs: List[BatchSearchDocs]
-    search_information: List[str]
+    navigator_agent_prompts: list[str]
+    navigator_agent_thoughts: list[str]
+    search_queries: list[list[str]]
+    retrieved_docs: list[BatchSearchDocs]
+    search_information: list[str]
     final_answer: str
-    timing: Dict[str, Any]
+    timing: dict[str, Any]
 
 
 class ParallelSearch(PromptedGenerationBase):
@@ -49,7 +49,7 @@ class ParallelSearch(PromptedGenerationBase):
         synthesize_max_tokens: int = 768,
         synthesize_temperature: float = 0.3,
         synthesize_top_p: float = 0.9,
-        stop_tokens: List[str] | None = None,
+        stop_tokens: list[str] | None = None,
         navigator_agent_use_chat_template: bool = False,
         navigator_agent_tokenizer: Any = None,
     ):
@@ -73,7 +73,7 @@ class ParallelSearch(PromptedGenerationBase):
         self.navigator_agent_use_chat_template = navigator_agent_use_chat_template
         self.navigator_agent_tokenizer = navigator_agent_tokenizer
 
-        self.latest_batch_timing: Dict[str, Any] = {}
+        self.latest_batch_timing: dict[str, Any] = {}
 
     @classmethod
     def from_args(cls, args) -> "ParallelSearch":
@@ -177,12 +177,12 @@ class ParallelSearch(PromptedGenerationBase):
             {"role": "user", "content": user_prompt},
         ]
 
-    def _split_search_query(self, raw_query: str) -> List[str]:
+    def _split_search_query(self, raw_query: str) -> list[str]:
         parts = [part.strip() for part in raw_query.split("##")]
         return [part for part in parts if part]
 
-    def _extract_searches(self, text: str) -> List[str]:
-        searches: List[str] = []
+    def _extract_searches(self, text: str) -> list[str]:
+        searches: list[str] = []
         for matched in SEARCH_TAG_PATTERN.findall(text):
             for query in self._split_search_query(matched.strip()):
                 if query and query not in searches:
@@ -199,7 +199,7 @@ class ParallelSearch(PromptedGenerationBase):
     def _build_navigator_agent_prompt(
         self,
         question: str,
-        history_blocks: List[str],
+        history_blocks: list[str],
         use_chat_template: bool,
     ) -> Any:
         information_history = "\n\n".join(history_blocks) if history_blocks else "None"
@@ -227,12 +227,12 @@ class ParallelSearch(PromptedGenerationBase):
         )
 
     def _build_information_appendix(
-        self, search_queries: List[str], docs_per_query: BatchSearchDocs
+        self, search_queries: list[str], docs_per_query: BatchSearchDocs
     ) -> str:
         if not search_queries:
             return "\n<information>\nNo query issued.\n</information>\n"
 
-        blocks: List[str] = []
+        blocks: list[str] = []
         for query_id, query in enumerate(search_queries, start=1):
             docs = (
                 docs_per_query[query_id - 1]
@@ -240,7 +240,7 @@ class ParallelSearch(PromptedGenerationBase):
                 else []
             )
             if docs:
-                doc_lines: List[str] = []
+                doc_lines: list[str] = []
                 for doc in docs:
                     doc_id = str(doc.get("id", "")).strip()
                     contents = str(doc.get("contents", "")).strip()
@@ -264,7 +264,7 @@ class ParallelSearch(PromptedGenerationBase):
         return "\n<information>\n" + "\n\n".join(blocks) + "\n</information>\n"
 
     def _build_final_answer_prompt(
-        self, question: str, history_blocks: List[str], use_chat_template: bool
+        self, question: str, history_blocks: list[str], use_chat_template: bool
     ) -> Any:
         information_history = "\n\n".join(history_blocks) if history_blocks else "None"
         system_prompt = (
@@ -285,12 +285,12 @@ class ParallelSearch(PromptedGenerationBase):
 
     def _generate_text_batch(
         self,
-        prompts: List[Any],
+        prompts: list[Any],
         config: SimpleNamespace,
         llm_client: OpenAIClient,
         tokenizer: Any = None,
         use_chat_template: bool | None = None,
-    ) -> List[str]:
+    ) -> list[str]:
         if not prompts:
             return []
 
@@ -317,11 +317,11 @@ class ParallelSearch(PromptedGenerationBase):
         return duration_ns / 1_000_000.0
 
     def _init_batch_runtime(
-        self, questions: List[str], max_iterations: int
-    ) -> tuple[List[bool], List[ParallelSearchResult], List[List[str]]]:
+        self, questions: list[str], max_iterations: int
+    ) -> tuple[list[bool], list[ParallelSearchResult], list[list[str]]]:
         completed = [False] * len(questions)
 
-        results: List[ParallelSearchResult] = [
+        results: list[ParallelSearchResult] = [
             {
                 "query": q,
                 "max_iterations": max_iterations,
@@ -343,25 +343,25 @@ class ParallelSearch(PromptedGenerationBase):
             for q in questions
         ]
 
-        information_histories: List[List[str]] = [[] for _ in questions]
+        information_histories: list[list[str]] = [[] for _ in questions]
         return completed, results, information_histories
 
     def run(self, question: str, max_iterations: int = 4) -> ParallelSearchResult:
         return self.run_batch([question], max_iterations=max_iterations)[0]
 
     def run_batch(
-        self, questions: List[str], max_iterations: int = 5
-    ) -> List[ParallelSearchResult]:
+        self, questions: list[str], max_iterations: int = 5
+    ) -> list[ParallelSearchResult]:
         if not questions:
             return []
 
         run_batch_started_ns = self._now_ns()
-        batch_phase_totals: Dict[str, float] = {
+        batch_phase_totals: dict[str, float] = {
             "phase1_navigator_ms": 0.0,
             "phase2_retrieval_ms": 0.0,
             "phase3_finalize_ms": 0.0,
         }
-        iteration_timings: List[Dict[str, Any]] = []
+        iteration_timings: list[dict[str, Any]] = []
 
         completed, results, information_histories = self._init_batch_runtime(
             questions=questions, max_iterations=max_iterations
@@ -375,7 +375,7 @@ class ParallelSearch(PromptedGenerationBase):
 
         for iteration_idx in range(max_iterations):
             iteration_started_ns = self._now_ns()
-            iteration_timing: Dict[str, Any] = {
+            iteration_timing: dict[str, Any] = {
                 "iteration": iteration_idx + 1,
                 "active_samples": 0,
                 "search_query_count": 0,
@@ -415,9 +415,9 @@ class ParallelSearch(PromptedGenerationBase):
             for sample_i in active_indices:
                 results[sample_i]["timing"]["phase1_navigator_ms"] += phase1_share
 
-            sample_search_queries: List[List[str]] = [[] for _ in range(len(questions))]
-            flat_queries: List[str] = []
-            query_meta: List[tuple[int, int]] = []
+            sample_search_queries: list[list[str]] = [[] for _ in range(len(questions))]
+            flat_queries: list[str] = []
+            query_meta: list[tuple[int, int]] = []
 
             for local_i, sample_i in enumerate(active_indices):
                 navigator_output = navigator_outputs[local_i]
@@ -470,7 +470,7 @@ class ParallelSearch(PromptedGenerationBase):
                         retrieval_share
                     )
 
-            docs_map: Dict[tuple[int, int], List[RetrieverDocument]] = {}
+            docs_map: dict[tuple[int, int], list[RetrieverDocument]] = {}
             for idx, docs in enumerate(flat_docs):
                 docs_map[query_meta[idx]] = docs
 

@@ -1,4 +1,4 @@
-from typing import Any, List, TypedDict
+from typing import Any, TypedDict
 
 from src.clients import RetrieverClient, RetrieverDocument
 from src.prompted_generation_base import (
@@ -22,7 +22,7 @@ NAIVE_RAG_SYSTEM_PROMPT = (
 class NaiveRAGResult(TypedDict):
     query: str
     prompt: str
-    retrieved_docs: List[RetrieverDocument]
+    retrieved_docs: list[RetrieverDocument]
     raw_output: str
     final_answer: str
     boxed_answer: str
@@ -51,7 +51,7 @@ class NaiveRAG(PromptedGenerationBase):
             tokenizer=tokenizer,
         )
 
-    def _build_information_block(self, docs: List[RetrieverDocument]) -> str:
+    def _build_information_block(self, docs: list[RetrieverDocument]) -> str:
         if not docs:
             return "<information>\nNo related documents found.\n</information>"
         doc_chunks = [
@@ -60,7 +60,7 @@ class NaiveRAG(PromptedGenerationBase):
         ]
         return "<information>\n" + "\n\n".join(doc_chunks) + "\n</information>"
 
-    def _build_prompt(self, question: str, docs: List[RetrieverDocument]) -> Any:
+    def _build_prompt(self, question: str, docs: list[RetrieverDocument]) -> Any:
         information_block = self._build_information_block(docs)
         user_prompt = "\n\n".join(
             [
@@ -74,7 +74,7 @@ class NaiveRAG(PromptedGenerationBase):
     def run(self, question: str) -> NaiveRAGResult:
         return self.run_batch([question])[0]
 
-    def run_batch(self, questions: List[str]) -> List[NaiveRAGResult]:
+    def run_batch(self, questions: list[str]) -> list[NaiveRAGResult]:
         retrieved_docs_batch = self.retriever.batch_search(questions)
         prompts = [
             self._build_prompt(question, docs)
@@ -82,7 +82,7 @@ class NaiveRAG(PromptedGenerationBase):
         ]
         outputs = self._generate_text_batch(prompts)
 
-        results: List[NaiveRAGResult] = []
+        results: list[NaiveRAGResult] = []
         for question, prompt, docs, output in zip(
             questions, prompts, retrieved_docs_batch, outputs
         ):
