@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def resolve_method_model_path(method: str, model: str, outputs_root: str) -> Path:
-    candidate = (Path(outputs_root) / method / model).resolve()
+    candidate = (Path(outputs_root).expanduser() / method / model).resolve()
     if not candidate.exists():
         raise FileNotFoundError(f"Path not found: {candidate}")
     return candidate

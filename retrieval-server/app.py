@@ -166,7 +166,7 @@ if __name__ == "__main__":
         help='Override gpu_id in config file, e.g. "0" or "0,1"',
     )
     parser.add_argument(
-        "--port", type=int, default=9000, help="Port to run the server on"
+        "--port", type=int, default=9100, help="Port to run the server on"
     )
     args = parser.parse_args()
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
-OPENAI_BASE_URL="http://127.0.0.1:8000/"
+DATA_ROOT="$HOME/llm/datasets/FlashRAG_datasets"
+OPENAI_BASE_URL="http://127.0.0.1:9101/"
 OPENAI_API_KEY="TEST"
 
 MODEL="Qwen3-32B"
@@ -11,7 +11,7 @@ dataset="bamboogle"
 input_file="${DATA_ROOT}/${dataset}/test.jsonl"
 result_file="./output.jsonl"
 
-python run_cot.py \
+python run/run_cot.py \
   --input_file "$input_file" \
   --result_file "$result_file" \
   --openai_base_url "$OPENAI_BASE_URL" \
@@ -21,11 +21,11 @@ python run_cot.py \
   --generation_temperature 0.8 \
   --generation_top_p 0.9 \
   --num_samples "$NUM_SAMPLES" \
-  --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
+  --model_path ~/llm/models/Qwen3-32B \
   --batch_size 10 \
   --use_chat_template
 
-python evaluate.py \
+python src/evaluate.py \
   --result_file "$result_file" \
   --dataset_name "$dataset" \
   --dataset_path "$input_file"

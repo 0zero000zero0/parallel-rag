@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
+DATA_ROOT="$HOME/llm/datasets/FlashRAG_datasets"
 RETRIEVER_BASE_URL="http://localhost:9100"
 # local
-OPENAI_BASE_URL="http://localhost:8000/"
+OPENAI_BASE_URL="http://localhost:9101/"
 OPENAI_API_KEY="TEST"
 
 # siliconflow
@@ -53,7 +53,7 @@ for dataset in "${DATASETS[@]}"; do
   echo "Output Dir: ${result_dir}"
 
 
-  python run_search_o1.py \
+  python run/run_search_o1.py \
     --input_file "$input_file" \
     --batch_size 512 \
     --retriever_base_url "$RETRIEVER_BASE_URL" \
@@ -72,11 +72,11 @@ for dataset in "${DATASETS[@]}"; do
     --num_samples "$NUM_SAMPLES"
 
   if [[ ! -f "$result_file" ]]; then
-    echo "ERROR: result file not found after run_search_o1.py: $result_file" >&2
+    echo "ERROR: result file not found after run/run_search_o1.py: $result_file" >&2
     exit 1
   fi
 
-  python evaluate.py \
+  python src/evaluate.py \
     --result_file "$result_file" \
     --dataset_name "$dataset" \
     --dataset_path "$input_file"

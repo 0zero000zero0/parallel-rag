@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
+DATA_ROOT="$HOME/llm/datasets/FlashRAG_datasets"
 RETRIEVER_BASE_URL="http://localhost:9100"
 
 # local
-# OPENAI_BASE_URL="http://localhost:8000/"
+# OPENAI_BASE_URL="http://localhost:9101/"
 # OPENAI_API_KEY="TEST"
 
 # siliconflow
@@ -17,7 +17,7 @@ DATASET="bamboogle"
 
 input_file="${DATA_ROOT}/${DATASET}/test.jsonl"
 
-python run_search_o1.py \
+python run/run_search_o1.py \
   --input_file "$input_file" \
   --batch_size 512 \
   --retriever_base_url "$RETRIEVER_BASE_URL" \

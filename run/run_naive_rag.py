@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import argparse
 import json
 from pathlib import Path
@@ -5,12 +9,12 @@ from typing import Any
 
 from tqdm import tqdm
 
-from src.naive_generation import NaiveGeneration
+from src.naive_rag import NaiveRAG
 from src.utils import build_output_dir, read_jsonlines, write_jsonlines
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Naive generation runner")
+    parser = argparse.ArgumentParser(description="Naive RAG runner")
     parser.add_argument(
         "--input_file",
         type=str,
@@ -23,6 +27,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--batch_size", type=int, default=512, help="Batch size for batched testing"
     )
+
+    parser.add_argument(
+        "--retriever_base_url", type=str, default="http://127.0.0.1:9100"
+    )
+    parser.add_argument("--retriever_top_k", type=int, default=5)
+    parser.add_argument("--retriever_timeout", type=float, default=None)
 
     parser.add_argument("--openai_base_url", type=str, default="http://127.0.0.1:8001")
     parser.add_argument("--openai_api_key", type=str, default="TEST")
@@ -53,9 +63,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    input_file_path = Path(args.input_file)
+    input_file_path = Path(args.input_file).expanduser()
     output_dir = build_output_dir(
-        input_file_path, method_name="naive-generation", model_name=args.model
+        input_file_path, method_name="naive-rag", model_name=args.model
     )
     dataset_name = input_file_path.parent.name
 
@@ -63,7 +73,7 @@ def main() -> None:
     if args.num_samples is not None:
         samples = samples[: max(0, args.num_samples)]
 
-    pipeline = NaiveGeneration.from_args(args)
+    pipeline = NaiveRAG.from_args(args)
 
     output_records: list[dict[str, Any]] = []
     batch_size = max(1, int(args.batch_size))
@@ -97,6 +107,7 @@ def main() -> None:
                 {
                     "query": question,
                     "prompt": "",
+                    "retrieved_docs": [],
                     "raw_output": "",
                     "final_answer": "",
                     "boxed_answer": "",
@@ -122,7 +133,7 @@ def main() -> None:
             )
 
     if args.result_file:
-        output_file_path = Path(args.result_file)
+        output_file_path = Path(args.result_file).expanduser()
     else:
         output_file_path = output_dir / f"{dataset_name}.jsonl"
         config_file_path = output_dir / "config.json"

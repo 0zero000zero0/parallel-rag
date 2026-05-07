@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
-OPENAI_BASE_URL="http://127.0.0.1:8000/"
+DATA_ROOT="$HOME/llm/datasets/FlashRAG_datasets"
+OPENAI_BASE_URL="http://127.0.0.1:9101/"
 OPENAI_API_KEY="TEST"
 
 MODEL="Qwen3-32B"
@@ -54,7 +54,7 @@ for dataset in "${DATASETS[@]}"; do
   echo "Output Dir: ${result_dir}"
 >>>>>>> gitcode/main
 
-  python run_naive_generation.py \
+  python run/run_naive_generation.py \
     --input_file "$input_file" \
     --batch_size 512 \
     --openai_base_url "$OPENAI_BASE_URL" \
@@ -63,16 +63,16 @@ for dataset in "${DATASETS[@]}"; do
     --generation_max_tokens 1024 \
     --generation_temperature 0.8 \
     --generation_top_p 0.9 \
-    --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
+    --model_path ~/llm/models/Qwen3-32B \
     --num_samples "$NUM_SAMPLES" \
     --use_chat_template
 
   if [[ ! -f "$result_file" ]]; then
-    echo "ERROR: result file not found after run_naive_generation.py: $result_file" >&2
+    echo "ERROR: result file not found after run/run_naive_generation.py: $result_file" >&2
     exit 1
   fi
 
-  python evaluate.py \
+  python src/evaluate.py \
     --result_file "$result_file" \
     --dataset_name "$dataset" \
     --dataset_path "$input_file"
@@ -84,7 +84,7 @@ done
 
 echo "All datasets done."
 
-python gather_metric.py \
+python src/gather_metric.py \
  --method  naive-generation \
  --model Qwen3-32B \
  --outputs_root outputs

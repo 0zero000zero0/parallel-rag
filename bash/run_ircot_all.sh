@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
-RETRIEVER_BASE_URL="http://127.0.0.1:9100"
-OPENAI_BASE_URL="http://127.0.0.1:8000/"
+DATA_ROOT="/mnt1/zhangdingwen/llm/datasets"
+RETRIEVER_BASE_URL="http://127.0.0.1:9000"
+OPENAI_BASE_URL="http://127.0.0.1:9101/"
 OPENAI_API_KEY="TEST"
 
 MODEL="Qwen3-32B"
 NUM_SAMPLES=1024
 DATASETS=(
-  # bamboogle
-  # 2wikimultihopqa
-  # hotpotqa
-  # musique
-  # nq
-  # popqa
-  # triviaqa
-  # ambigqa
-  # gpqa
-  gaia
+  bamboogle
+  2wikimultihopqa
+  hotpotqa
+  musique
+  nq
+  popqa
+  triviaqa
+  ambigqa
+  gpqa
+  # gaia
 )
 
 for dataset in "${DATASETS[@]}"; do
@@ -48,7 +48,7 @@ for dataset in "${DATASETS[@]}"; do
   echo "Processing Dataset: ${dataset}"
   echo "Output Dir: ${result_dir}"
 
-  python run_ircot.py \
+  python run/run_ircot.py \
     --input_file "$input_file" \
     --batch_size 512 \
     --retriever_base_url "$RETRIEVER_BASE_URL" \
@@ -59,18 +59,18 @@ for dataset in "${DATASETS[@]}"; do
     --generation_max_tokens 1024 \
     --generation_temperature 0.8 \
     --generation_top_p 0.9 \
-    --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
+    --model_path /mnt1/zhangdingwen/llm/models/Qwen3-32B \
     --max_search_limit 5 \
     --max_iterations 10 \
     --num_samples "$NUM_SAMPLES" \
     --use_chat_template
 
   if [[ ! -f "$result_file" ]]; then
-    echo "ERROR: result file not found after run_ircot.py: $result_file" >&2
+    echo "ERROR: result file not found after run/run_ircot.py: $result_file" >&2
     exit 1
   fi
 
-  python evaluate.py \
+  python src/evaluate.py \
     --result_file "$result_file" \
     --dataset_name "$dataset" \
     --dataset_path "$input_file"
@@ -82,7 +82,7 @@ done
 
 echo "All datasets done."
 
-python gather_metric.py \
+python src/gather_metric.py \
  --method ircot \
  --model Qwen3-32B \
  --outputs_root outputs

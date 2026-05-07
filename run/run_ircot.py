@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import argparse
 import json
 from pathlib import Path
@@ -53,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    input_file_path = Path(args.input_file)
+    input_file_path = Path(args.input_file).expanduser()
     output_dir = build_output_dir(input_file_path,
                                   method_name="ircot",
                                   model_name=args.model)
@@ -125,7 +129,7 @@ def main() -> None:
             })
 
     if args.result_file:
-        output_file_path = Path(args.result_file)
+        output_file_path = Path(args.result_file).expanduser()
     else:
         output_file_path = output_dir / f"{dataset_name}.jsonl"
         config_file_path = output_dir / "config.json"

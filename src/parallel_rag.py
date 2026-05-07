@@ -48,7 +48,7 @@ def _first_not_none(*values: Any) -> Any:
 def _load_tokenizer(model_path: str) -> Any:
     from transformers import AutoTokenizer
 
-    return AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    return AutoTokenizer.from_pretrained(str(Path(model_path).expanduser()), trust_remote_code=True)
 
 
 class PooledDocument(TypedDict):

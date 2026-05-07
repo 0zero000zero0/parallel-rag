@@ -43,7 +43,7 @@ def to_chat_prompt(system_content: str, user_content: str) -> Any:
 tokenizer = AutoTokenizer.from_pretrained("/home/zdw2200170271/llm/models/Qwen3-32B")
 
 PARAMS: dict[str, Any] = {
-    "base_url": "http://127.0.0.1:8000",
+    "base_url": "http://127.0.0.1:9101",
     "model": "Qwen3-32B",
     "api_key": "TEST",
     "endpoint": None,

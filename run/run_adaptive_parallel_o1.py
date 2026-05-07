@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import argparse
 import json
 import time
@@ -6,12 +10,17 @@ from typing import Any
 
 from tqdm import tqdm
 
-from src.parallel_rag import ParallelRAG
-from src.utils import build_output_dir, percentile, read_jsonlines, write_jsonlines
+from src.adaptive_parallel_o1 import AdaptiveParallelO1
+from src.utils import (
+    build_output_dir,
+    percentile,
+    read_jsonlines,
+    write_jsonlines,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Parallel RAG runner")
+    parser = argparse.ArgumentParser(description="Parallel o1 runner")
     parser.add_argument(
         "--input_file",
         type=str,
@@ -67,6 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Whether navigator agent should use chat template; default inherits use_chat_template",
     )
+    parser.add_argument(
+        "--navigator_agent_enable_thinking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Whether navigator agent enables thinking mode; default inherits shared/legacy flag",
+    )
 
     parser.add_argument(
         "--global_refine_agent_model",
@@ -104,18 +119,64 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Whether global refine agent should use chat template; default inherits navigator_agent_use_chat_template",
     )
+    parser.add_argument(
+        "--global_refine_agent_enable_thinking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Whether global refine agent enables thinking mode; default inherits navigator_agent_enable_thinking",
+    )
+
+    parser.add_argument(
+        "--path_agent_model", type=str, default=None, help="Model used by path agent"
+    )
+    parser.add_argument(
+        "--path_agent_openai_base_url",
+        type=str,
+        default=None,
+        help="Optional dedicated OpenAI base URL for path agent client",
+    )
+    parser.add_argument(
+        "--path_agent_openai_api_key",
+        type=str,
+        default=None,
+        help="Optional dedicated OpenAI API key for path agent client",
+    )
+    parser.add_argument(
+        "--path_agent_llm_timeout",
+        type=float,
+        default=None,
+        help="Optional dedicated timeout for path agent client",
+    )
+    parser.add_argument(
+        "--path_agent_model_path",
+        type=str,
+        default=None,
+        help="Tokenizer source for path model when using chat template",
+    )
+    parser.add_argument(
+        "--path_agent_use_chat_template",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Whether path agent should use chat template; default inherits navigator_agent_use_chat_template",
+    )
+    parser.add_argument(
+        "--path_agent_enable_thinking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Whether path agent enables thinking mode; default inherits navigator_agent_enable_thinking",
+    )
 
     parser.add_argument("--navigator_agent_max_tokens", type=int, default=256)
     parser.add_argument("--navigator_agent_temperature", type=float, default=0.6)
     parser.add_argument("--navigator_agent_top_p", type=float, default=0.9)
 
+    parser.add_argument("--path_agent_max_tokens", type=int, default=512)
+    parser.add_argument("--path_agent_temperature", type=float, default=0.8)
+    parser.add_argument("--path_agent_top_p", type=float, default=0.9)
+
     parser.add_argument("--global_refine_agent_max_tokens", type=int, default=1024)
     parser.add_argument("--global_refine_agent_temperature", type=float, default=0.8)
     parser.add_argument("--global_refine_agent_top_p", type=float, default=0.9)
-
-    parser.add_argument("--synthesize_max_tokens", type=int, default=768)
-    parser.add_argument("--synthesize_temperature", type=float, default=0.3)
-    parser.add_argument("--synthesize_top_p", type=float, default=0.9)
 
     # Backward-compatible aliases.
     parser.add_argument("--openai_base_url", type=str, default=None)
@@ -124,6 +185,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model_path", type=str, default=None)
     parser.add_argument("--llm_timeout", type=float, default=None)
     parser.add_argument("--use_chat_template", action="store_true", default=None)
+    parser.add_argument(
+        "--enable_thinking", action=argparse.BooleanOptionalAction, default=None
+    )
     parser.add_argument("--shared_openai_base_url", type=str, default=None)
     parser.add_argument("--shared_openai_api_key", type=str, default=None)
     parser.add_argument("--shared_llm_timeout", type=float, default=None)
@@ -134,11 +198,16 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=None,
     )
+    parser.add_argument(
+        "--shared_enable_thinking", action=argparse.BooleanOptionalAction, default=None
+    )
     parser.add_argument("--refine_max_tokens", type=int, default=None)
     parser.add_argument("--refine_temperature", type=float, default=None)
     parser.add_argument("--refine_top_p", type=float, default=None)
 
-    parser.add_argument("--stop_tokens", type=str, default="</search>,</answer>")
+    parser.add_argument(
+        "--stop_tokens", type=str, default="</search>,</answer>,</search_directions>"
+    )
     parser.add_argument("--max_iterations", type=int, default=5)
     parser.add_argument("--num_samples", type=int, default=None)
 
@@ -151,18 +220,12 @@ def main() -> None:
     run_started_ns = time.perf_counter_ns()
     parser = build_parser()
     args = parser.parse_args()
-    input_file_path = Path(args.input_file)
-    output_model_name = (
-        args.navigator_agent_model
-        or args.global_refine_agent_model
-        or args.shared_model
-        or args.model
-        or "Qwen3-14B"
-    )
+    input_file_path = Path(args.input_file).expanduser()
+
     output_dir = build_output_dir(
         input_file_path,
-        method_name="parallel-rag",
-        model_name=output_model_name,
+        method_name="adaptive-parallel-o1",
+        model_name=args.navigator_agent_model,
         top_dir=args.output_top_dir,
     )
     dataset_name = input_file_path.parent.name
@@ -173,7 +236,7 @@ def main() -> None:
     if args.num_samples is not None:
         samples = samples[: max(0, args.num_samples)]
 
-    pipeline = ParallelRAG.from_args(args)
+    pipeline = AdaptiveParallelO1.from_args(args)
 
     output_records: list[dict[str, Any]] = []
     batch_timings: list[dict[str, Any]] = []
@@ -189,7 +252,6 @@ def main() -> None:
         print("debugger attached")
         print("break point")
         debugpy.breakpoint()
-
     pipeline_started_ns = time.perf_counter_ns()
     for batch_idx, batch_start in enumerate(
         tqdm(batch_starts, desc="Processing batches", unit="batch")
@@ -204,12 +266,13 @@ def main() -> None:
             validated_items.append((idx, question, golden_answers))
             questions.append(question)
 
+        batch_results: list[dict[str, Any]] = []
+
         batch_started_ns = time.perf_counter_ns()
         batch_results = [
             dict(item) for item in pipeline.run_batch(questions, args.max_iterations)
         ]
         batch_wall_ms = (time.perf_counter_ns() - batch_started_ns) / 1_000_000.0
-
         batch_timing = dict(pipeline.latest_batch_timing)
         batch_timing.update(
             {
@@ -239,7 +302,7 @@ def main() -> None:
     pipeline_total_ms = (time.perf_counter_ns() - pipeline_started_ns) / 1_000_000.0
 
     if args.result_file:
-        output_file_path = Path(args.result_file)
+        output_file_path = Path(args.result_file).expanduser()
     else:
         output_file_path = output_dir / f"{dataset_name}.jsonl"
         config_file_path = output_dir / "config.json"

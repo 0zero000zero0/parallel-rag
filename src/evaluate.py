@@ -90,7 +90,7 @@ def extract_answer(record: dict[str, Any]) -> str:
 
 def main() -> None:
     args = build_parser().parse_args()
-    result_file = Path(args.result_file).resolve()
+    result_file = Path(args.result_file).expanduser().resolve()
     if not result_file.exists():
         raise FileNotFoundError(f"result_file not found: {result_file}")
 
@@ -101,7 +101,7 @@ def main() -> None:
 
     predictions: list[str] = []
 
-    dataset_path = args.dataset_path
+    dataset_path = str(Path(dataset_path).expanduser()) if dataset_path else None
     dataset_name = args.dataset_name
     dataset: Dataset = Dataset(
         config={"dataset_name": dataset_name},

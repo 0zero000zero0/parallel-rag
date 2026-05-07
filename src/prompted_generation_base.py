@@ -119,8 +119,9 @@ def resolve_chat_template_components(args) -> tuple[bool, Any]:
     model_path = getattr(args, "model_path", None)
     if use_chat_template and tokenizer is None and model_path:
         from transformers import AutoTokenizer
-
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        model_path_expanded = str(Path(model_path).expanduser())
+        tokenizer = AutoTokenizer.from_pretrained(model_path_expanded,
+                                                   trust_remote_code=True)
     return use_chat_template, tokenizer
 
 

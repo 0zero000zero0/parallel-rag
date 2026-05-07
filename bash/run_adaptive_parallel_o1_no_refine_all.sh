@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/mnt1/zhangdingwen/llm/datasets"
-RETRIEVER_BASE_URL="http://127.0.0.1:9000"
+DATA_ROOT="$HOME/llm/datasets"
+RETRIEVER_BASE_URL="http://127.0.0.1:9100"
 # local
-NAVIGATOR_AGENT_OPENAI_BASE_URL="http://127.0.0.1:8000/"
+NAVIGATOR_AGENT_OPENAI_BASE_URL="http://127.0.0.1:9101/"
 NAVIGATOR_AGENT_OPENAI_API_KEY="TEST"
 NAVIGATOR_AGENT_MODEL="Qwen3-32B"
-NAVIGATOR_AGENT_MODEL_PATH="/mnt1/zhangdingwen/llm/models/Qwen3-32B"
+NAVIGATOR_AGENT_MODEL_PATH="$HOME/llm/models/Qwen3-32B"
 
-PATH_AGENT_OPENAI_BASE_URL="http://127.0.0.1:8000/"
+PATH_AGENT_OPENAI_BASE_URL="http://127.0.0.1:9101/"
 PATH_AGENT_OPENAI_API_KEY="TEST"
 PATH_AGENT_MODEL="Qwen3-32B"
-PATH_AGENT_MODEL_PATH="/mnt1/zhangdingwen/llm/models/Qwen3-32B"
+PATH_AGENT_MODEL_PATH="$HOME/llm/models/Qwen3-32B"
 
 TEMPERATURE=0.8
 TOP_P=0.95
@@ -57,7 +57,7 @@ for dataset in "${DATASETS[@]}"; do
   echo "Processing Dataset: ${dataset}"
   echo "Output Dir: ${result_dir}"
 
-  python run_adaptive_parallel_o1_no_refine.py \
+  python run/run_adaptive_parallel_o1_no_refine.py \
     --input_file "$input_file" \
     --batch_size 512 \
     --retriever_base_url "$RETRIEVER_BASE_URL" \
@@ -83,7 +83,7 @@ for dataset in "${DATASETS[@]}"; do
     --max_iterations 5 \
     --num_samples "$NUM_SAMPLES"
 
-  python evaluate.py \
+  python src/evaluate.py \
     --result_file "$result_file" \
     --dataset_name "$dataset" \
     --dataset_path "$input_file"
@@ -95,7 +95,7 @@ done
 
 echo "All datasets done."
 
-python gather_metric.py \
+python src/gather_metric.py \
   --method adaptive-parallel-o1-no-refine \
   --model "${NAVIGATOR_AGENT_MODEL}" \
   --outputs_root outputs

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
+DATA_ROOT="$HOME/llm/datasets/FlashRAG_datasets"
 RETRIEVER_BASE_URL="http://127.0.0.1:9100"
 
-OPENAI_BASE_URL="http://127.0.0.1:8000/"
+OPENAI_BASE_URL="http://127.0.0.1:9101/"
 OPENAI_API_KEY="TEST"
 
 MODEL="Qwen3-32B"
@@ -13,7 +13,7 @@ DATASET="bamboogle"
 INPUT_FILE="${DATA_ROOT}/${DATASET}/test.jsonl"
 RESULT_FILE="./output.jsonl"
 
-python run_ircot.py \
+python run/run_ircot.py \
   --input_file "$INPUT_FILE" \
   --result_file "$RESULT_FILE" \
   --batch_size 10 \
@@ -25,13 +25,13 @@ python run_ircot.py \
   --generation_max_tokens 1024 \
   --generation_temperature 0.8 \
   --generation_top_p 0.9 \
-  --model_path /home/zdw2200170271/llm/models/Qwen3-32B \
+  --model_path ~/llm/models/Qwen3-32B \
   --max_search_limit 5 \
   --max_iterations 10 \
   --num_samples "$NUM_SAMPLES" \
   --use_chat_template
 
-python evaluate.py \
+python src/evaluate.py \
   --result_file "$RESULT_FILE" \
   --dataset_name "$DATASET" \
   --dataset_path "$INPUT_FILE"

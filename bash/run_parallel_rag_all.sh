@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_ROOT="/home/zdw2200170271/llm/datasets/FlashRAG_datasets"
+DATA_ROOT="$HOME/llm/datasets/FlashRAG_datasets"
 RETRIEVER_BASE_URL="http://127.0.0.1:9100"
 
-NAVIGATOR_AGENT_OPENAI_BASE_URL="http://127.0.0.1:8000/"
+NAVIGATOR_AGENT_OPENAI_BASE_URL="http://127.0.0.1:9101/"
 NAVIGATOR_AGENT_OPENAI_API_KEY="TEST"
 NAVIGATOR_AGENT_MODEL="Qwen3-32B"
-NAVIGATOR_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
+NAVIGATOR_AGENT_MODEL_PATH="$HOME/llm/models/Qwen3-32B"
 
-GLOBAL_REFINE_AGENT_OPENAI_BASE_URL="http://127.0.0.1:8000/"
+GLOBAL_REFINE_AGENT_OPENAI_BASE_URL="http://127.0.0.1:9101/"
 GLOBAL_REFINE_AGENT_OPENAI_API_KEY="TEST"
 GLOBAL_REFINE_AGENT_MODEL="Qwen3-32B"
-GLOBAL_REFINE_AGENT_MODEL_PATH="/home/zdw2200170271/llm/models/Qwen3-32B"
+GLOBAL_REFINE_AGENT_MODEL_PATH="$HOME/llm/models/Qwen3-32B"
 
 NUM_SAMPLES=1024
 DATASETS=(
@@ -52,7 +52,7 @@ for DATASET in "${DATASETS[@]}"; do
   echo "Processing Dataset: ${DATASET}"
   echo "Output Dir: ${RESULT_DIR}"
 
-  python run_parallel_rag.py \
+  python run/run_parallel_rag.py \
     --input_file "$INPUT_FILE" \
     --result_file "$RESULT_FILE" \
     --batch_size 512 \
@@ -80,7 +80,7 @@ for DATASET in "${DATASETS[@]}"; do
     --max_iterations 5 \
     --num_samples "$NUM_SAMPLES"
 
-  python evaluate.py \
+  python src/evaluate.py \
     --result_file "$RESULT_FILE" \
     --dataset_name "$DATASET" \
     --dataset_path "$INPUT_FILE"
@@ -91,7 +91,7 @@ for DATASET in "${DATASETS[@]}"; do
 done
 
 echo "All datasets done."
-python gather_metric.py \
+python src/gather_metric.py \
  --method  parallel-rag \
  --model Qwen3-32B \
  --outputs_root outputs

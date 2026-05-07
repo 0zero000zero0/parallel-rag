@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import argparse
 import json
 import time
@@ -74,7 +78,7 @@ def main() -> None:
     run_started_ns = time.perf_counter_ns()
     parser = build_parser()
     args = parser.parse_args()
-    input_path = Path(args.input_file)
+    input_path = Path(args.input_file).expanduser()
     output_dir = build_output_dir(
         input_path,
         method_name="search-o1",
@@ -174,7 +178,7 @@ def main() -> None:
     pipeline_total_ms = (time.perf_counter_ns() - pipeline_started_ns) / 1_000_000.0
 
     if args.result_file:
-        output_path = Path(args.result_file)
+        output_path = Path(args.result_file).expanduser()
     else:
         output_path = output_dir / f"{dataset_name}.jsonl"
         config_path = output_dir / "config.json"

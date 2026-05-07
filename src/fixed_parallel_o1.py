@@ -1,5 +1,6 @@
 import re
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, TypedDict
 
@@ -135,7 +136,7 @@ class FixedParallelO1:
             from transformers import AutoTokenizer
 
             tokenizer = AutoTokenizer.from_pretrained(
-                model_path, trust_remote_code=True
+                str(Path(model_path).expanduser()), trust_remote_code=True
             )
 
         parallel_path_count = int(getattr(args, "parallel_path_count", 3))
